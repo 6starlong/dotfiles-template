@@ -1,0 +1,14 @@
+# Dotfiles .gitignore
+
+# Backup files - 不提交备份文件到版本控制
+backups/
+
+# Temporary files
+*.tmp
+~*
+
+# Windows system files
+Thumbs.db
+
+# Logs
+*.log
