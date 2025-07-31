@@ -1,4 +1,4 @@
-# config.psd1
+﻿# config.psd1
 # Dotfiles 管理脚本的核心配置文件
 #
 # 添加新配置的步骤：
@@ -9,12 +9,13 @@
 # - Source: 源文件路径（相对于仓库根目录）
 # - Target: 目标路径（使用 {USERPROFILE} 占位符）
 # - Comment: 配置描述
-# - Method: 部署方法 "SymLink"（默认）或 "Copy"
+# - Method: 部署方法 "SymLink"（默认）或 "Copy" 或 "Transform"
 
 @{
     # 默认部署方法
     # "SymLink" - 创建符号链接（推荐）
     # "Copy" - 直接复制文件（适用于会被应用修改的配置）
+    # "Transform" - 转换格式后复制（适用于需要格式转换的配置）
     DefaultMethod = "SymLink"
 
     # 备份配置
@@ -42,9 +43,33 @@
         # Test 配置
         @{
             Source  = "test\demo.txt"
-            Target  = "{USERPROFILE}\demo.txt"
-            Comment = "Test Config"
+            Target  = "{USERPROFILE}\demo1.txt"
+            Comment = "Test 1"
             Method  = "Copy"
+        }
+
+        @{
+            Source  = "test\demo.txt"
+            Target  = "{USERPROFILE}\demo2.txt"
+            Comment = "Test 2"
+            Method  = "Copy"
+        }
+
+        # MCP 配置文件
+        @{
+            Source    = "mcp\base.json"
+            Target    = "{USERPROFILE}\AppData\Roaming\Code\User\mcp.json"
+            Comment   = "MCP Config for VSCode"
+            Method    = "Transform"
+            Transform = "mcp:vscode"
+        }
+
+        @{
+            Source    = "mcp\base.json"
+            Target    = "{USERPROFILE}\.cursor\mcp.json"
+            Comment   = "MCP Config for Cursor"
+            Method    = "Transform"
+            Transform = "mcp:cursor"
         }
     )
 }

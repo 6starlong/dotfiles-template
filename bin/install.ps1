@@ -77,6 +77,21 @@ foreach ($link in $config.Links) {
         if ($method -eq "Copy") {
             Copy-Item -Path $sourcePath -Destination $targetPath -Force -ErrorAction Stop
             Write-Host "    ✅ 已复制 ($($link.Comment)): $sourcePath -> $targetPath" -ForegroundColor Green
+        } elseif ($method -eq "Transform") {
+            # 使用转换脚本处理
+            if (-not $link.Transform) {
+                Write-Host "    ❌ Transform配置缺少Transform参数: $($link.Comment)" -ForegroundColor Red
+                continue
+            }
+            
+            $transformScript = Join-Path $PSScriptRoot "transform.ps1"
+            if (-not (Test-Path $transformScript)) {
+                Write-Host "    ❌ 转换脚本未找到: $transformScript" -ForegroundColor Red
+                continue
+            }
+            
+            & $transformScript -SourceFile $sourcePath -TargetFile $targetPath -TransformType $link.Transform -ErrorAction Stop
+            Write-Host "    ✅ 已转换 ($($link.Comment)): $sourcePath -> $targetPath" -ForegroundColor Green
         } else {
             New-Item -ItemType SymbolicLink -Path $targetPath -Target $sourcePath -Force -ErrorAction Stop | Out-Null
             Write-Host "    ✅ 已链接 ($($link.Comment)): $targetPath -> $sourcePath" -ForegroundColor Green

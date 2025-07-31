@@ -1,0 +1,14 @@
+{
+  "preserveFormat": true,
+  "formatting": {
+    "indent": 2
+  },
+  "default": {
+    "mcpServers": "mcpServers"
+  },
+  "mappings": {
+    "vscode": {
+      "mcpServers": "servers"
+    }
+  }
+}
