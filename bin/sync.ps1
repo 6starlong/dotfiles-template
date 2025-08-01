@@ -3,9 +3,35 @@
 # 支持 Copy 和 Transform 方法的配置文件
 
 param(
-    [switch]$Force,
-    [switch]$Silent
+    [Parameter(Position=0, Mandatory=$false)]
+    [ValidateSet("sync", "force", "silent", "help")]
+    [string]$Action = "sync"
 )
+
+# 处理帮助信息
+if ($Action -eq "help") {
+    Write-Host ""
+    Write-Host "📋 同步工具使用说明" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "用法: .\sync.ps1 [action]" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "可用操作:" -ForegroundColor Yellow
+    Write-Host "  sync     - 交互式同步 (默认)" -ForegroundColor White
+    Write-Host "  force    - 强制同步(覆盖所有冲突)" -ForegroundColor White
+    Write-Host "  silent   - 静默模式(跳过所有冲突)" -ForegroundColor White
+    Write-Host "  help     - 显示此帮助信息" -ForegroundColor White
+    Write-Host ""
+    Write-Host "示例:" -ForegroundColor Yellow
+    Write-Host "  .\sync.ps1                  # 交互式同步" -ForegroundColor Gray
+    Write-Host "  .\sync.ps1 force            # 强制同步" -ForegroundColor Gray
+    Write-Host "  .\sync.ps1 silent           # 静默同步" -ForegroundColor Gray
+    Write-Host ""
+    return
+}
+
+# 设置模式变量
+$Force = ($Action -eq "force")
+$Silent = ($Action -eq "silent")
 
 $dotfilesDir = Split-Path $PSScriptRoot -Parent
 
@@ -459,11 +485,5 @@ if ($syncedCount -gt 0) {
     Write-Host "    💡 提示: 记得提交更改到Git仓库" -ForegroundColor Yellow
     Write-Host "       git add ." -ForegroundColor Gray
     Write-Host "       git commit -m `"Update configurations`"" -ForegroundColor Gray
+    Write-Host ""
 }
-
-Write-Host ""
-Write-Host "    📖 使用说明:" -ForegroundColor Cyan
-Write-Host "       .\sync.ps1          # 交互式同步" -ForegroundColor Gray
-Write-Host "       .\sync.ps1 -Force   # 强制同步(覆盖所有冲突)" -ForegroundColor Gray
-Write-Host "       .\sync.ps1 -Silent  # 静默模式(跳过所有冲突)" -ForegroundColor Gray
-Write-Host ""

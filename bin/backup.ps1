@@ -2,7 +2,7 @@
 # 配置文件备份管理工具
 
 param(
-    [Parameter(Mandatory=$false)]
+    [Parameter(Position=0, Mandatory=$false)]
     [ValidateSet("create", "list", "restore", "clean", "help")]
     [string]$Action = "create"
 )
@@ -23,7 +23,7 @@ function Show-Help {
     Write-Host ""
     Write-Host "📋 备份工具使用说明" -ForegroundColor Green
     Write-Host ""
-    Write-Host "用法: .\backup.ps1 [-Action <action>]" -ForegroundColor Cyan
+    Write-Host "用法: .\backup.ps1 [action]" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "可用操作:" -ForegroundColor Yellow
     Write-Host "  create   - 创建新备份 (默认)" -ForegroundColor White
@@ -33,9 +33,9 @@ function Show-Help {
     Write-Host "  help     - 显示此帮助信息" -ForegroundColor White
     Write-Host ""
     Write-Host "示例:" -ForegroundColor Yellow
-    Write-Host "  .\backup.ps1                    # 创建备份" -ForegroundColor Gray
-    Write-Host "  .\backup.ps1 -Action list       # 列出备份" -ForegroundColor Gray
-    Write-Host "  .\backup.ps1 -Action restore    # 恢复备份" -ForegroundColor Gray
+    Write-Host "  .\backup.ps1                # 创建备份" -ForegroundColor Gray
+    Write-Host "  .\backup.ps1 list           # 列出备份" -ForegroundColor Gray
+    Write-Host "  .\backup.ps1 restore        # 恢复备份" -ForegroundColor Gray
     Write-Host ""
 }
 
@@ -158,8 +158,7 @@ function List-Backups {
         $sizeStr = if ($size -gt 1MB) { "{0:N2} MB" -f ($size / 1MB) } else { "{0:N2} KB" -f ($size / 1KB) }
 
         Write-Host "    [$($i + 1)] $($backup.Name)" -ForegroundColor Cyan
-        Write-Host "         创建时间: $($backup.CreationTime.ToString('yyyy-MM-dd HH:mm:ss'))" -ForegroundColor Gray
-        Write-Host "         大小: $sizeStr" -ForegroundColor Gray
+        Write-Host "        创建时间: $($backup.CreationTime.ToString('yyyy-MM-dd HH:mm:ss'))    大小: $sizeStr" -ForegroundColor Gray
         Write-Host ""
     }
 }
@@ -221,56 +220,45 @@ function Restore-FromBackup {
 }
 
 function Clean-OldBackups {
-
     if (-not (Test-Path $backupBaseDir)) {
         Write-Host "    ❌ 备份目录不存在" -ForegroundColor Red
         Write-Host ""
         return
     }
 
-    $maxBackups = $backupSettings.MaxBackups
-    if ($maxBackups -eq 0) {
-        Write-Host "    ⚠️  未设置最大备份数限制，不执行清理" -ForegroundColor Yellow
-        Write-Host ""
-        return
-    }
-
     $backups = Get-ChildItem -Path $backupBaseDir -Directory | Sort-Object CreationTime -Descending
 
-    Write-Host "    📊 当前备份数量: $($backups.Count)" -ForegroundColor Cyan
-    Write-Host "    📋 最大备份数量: $maxBackups" -ForegroundColor Cyan
-    Write-Host ""
-
-    if ($backups.Count -le $maxBackups) {
-        Write-Host "    ✅ 备份数量在限制范围内，无需清理" -ForegroundColor Green
+    if ($backups.Count -eq 0) {
+        Write-Host "    📭 没有找到备份文件" -ForegroundColor Yellow
         Write-Host ""
         return
     }
 
-    $toDelete = $backups | Select-Object -Skip $maxBackups
-    Write-Host "    🗑️ 将删除 $($toDelete.Count) 个旧备份:" -ForegroundColor Yellow
+    Write-Host "    📊 当前备份数量: $($backups.Count)" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "    🗑️ 将删除所有备份文件:" -ForegroundColor Yellow
     Write-Host ""
 
-    foreach ($backup in $toDelete) {
+    foreach ($backup in $backups) {
         Write-Host "        - $($backup.Name)" -ForegroundColor Gray
     }
 
     Write-Host ""
-    Write-Host -NoNewline "    确认删除? (y/N): "
+    Write-Host -NoNewline "    确认删除所有备份? (y/N): "
     $confirm = Read-Host
 
     if ($confirm -eq 'y' -or $confirm -eq 'Y') {
         Write-Host ""
-        foreach ($backup in $toDelete) {
+        foreach ($backup in $backups) {
             Remove-Item $backup.FullName -Recurse -Force
             Write-Host "    🗑️ 已删除: $($backup.Name)" -ForegroundColor DarkGray
         }
         Write-Host ""
-        Write-Host "    ✅ 清理完成!" -ForegroundColor Green
+        Write-Host "    ✅ 清理完成! 已删除所有 $($backups.Count) 个备份" -ForegroundColor Green
         Write-Host ""
     } else {
         Write-Host ""
-        Write-Host "    ❌ 取消清理" -ForegroundColor Yellow
+        Write-Host "    ❌ 取消清理" -ForegroundColor Red
         Write-Host ""
     }
 }

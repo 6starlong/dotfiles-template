@@ -2,9 +2,9 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Setup (Admin)",
+      "label": "Setup",
       "type": "shell",
-      "command": "Start-Process -FilePath .\\setup.cmd -Verb RunAs",
+      "command": "Start-Process -FilePath .\\setup.cmd",
       "options": {
         "shell": {
           "executable": "powershell.exe",
@@ -15,8 +15,8 @@
         "isDefault": true
       },
       "presentation": {
-        "reveal": "silent",
-        "close": true
+        "reveal": "always",
+        "focus": true
       },
       "problemMatcher": []
     },

@@ -42,10 +42,10 @@ function Show-BackupMenu {
     Write-Host ""
 
     switch ($choice) {
-        "1" { & (Join-Path $PSScriptRoot "backup.ps1") -Action create; Pause-Continue }
-        "2" { & (Join-Path $PSScriptRoot "backup.ps1") -Action list; Pause-Continue }
-        "3" { & (Join-Path $PSScriptRoot "backup.ps1") -Action restore; Pause-Continue }
-        "4" { & (Join-Path $PSScriptRoot "backup.ps1") -Action clean; Pause-Continue }
+        "1" { & (Join-Path $PSScriptRoot "backup.ps1") create; Pause-Continue }
+        "2" { & (Join-Path $PSScriptRoot "backup.ps1") list; Pause-Continue }
+        "3" { & (Join-Path $PSScriptRoot "backup.ps1") restore; Pause-Continue }
+        "4" { & (Join-Path $PSScriptRoot "backup.ps1") clean; Pause-Continue }
         "0" { return }
         default {
             Write-Host "    [错误] 无效选择，请重试！" -ForegroundColor Red
@@ -130,7 +130,7 @@ do {
         }
         default {
             Write-Host "    [错误] 无效选择，请重试！" -ForegroundColor Red
-            Start-Sleep -Seconds 2
+            Start-Sleep -Seconds 1
         }
     }
 } while ($true)
