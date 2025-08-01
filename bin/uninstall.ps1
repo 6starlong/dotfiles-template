@@ -11,7 +11,7 @@ if (-not (Test-Path $configFile)) {
 }
 $config = Import-PowerShellDataFile -Path $configFile
 
-Write-Host "    🗑️  开始卸载 dotfiles 配置..." -ForegroundColor Yellow
+Write-Host "    🗑️ 开始卸载 dotfiles 配置..." -ForegroundColor Yellow
 Write-Host ""
 
 $removedCount = 0
@@ -31,7 +31,7 @@ foreach ($link in $config.Links) {
             $skippedCount++
         }
     } else {
-        Write-Host "    ➡️  跳过 ($($link.Comment)): 文件不存在" -ForegroundColor Cyan
+        Write-Host "    ➡️ 跳过 ($($link.Comment)): 文件不存在" -ForegroundColor Cyan
         $skippedCount++
     }
 }

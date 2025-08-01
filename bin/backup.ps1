@@ -70,6 +70,7 @@ function Create-Backup {
     }
 
     Write-Host "    📁 创建备份目录: $backupPath" -ForegroundColor Cyan
+    Write-Host ""
 
     # 创建备份目录
     try {
@@ -103,11 +104,11 @@ function Create-Backup {
         try {
             Copy-Item $targetPath $backupFilePath -Force -ErrorAction Stop
             Write-Host "    ✅ 备份: $($link.Comment)" -ForegroundColor Green
-            Write-Host ""
             Write-Host "    $targetPath -> $backupFilePath" -ForegroundColor Gray
+            Write-Host ""
             $backedUpCount++
         } catch {
-            Write-Host "    ⚠️  备份失败: $($link.Comment). 错误: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "    ⚠️ 备份失败: $($link.Comment). 错误: $($_.Exception.Message)" -ForegroundColor Yellow
         }
     }
 
@@ -120,7 +121,7 @@ function Create-Backup {
         if ($allBackups.Count -gt $backupSettings.MaxBackups) {
             $toDelete = $allBackups | Select-Object -Skip $backupSettings.MaxBackups
             foreach ($oldBackup in $toDelete) {
-                Write-Host "🗑️  删除旧备份: $($oldBackup.Name)" -ForegroundColor DarkGray
+                Write-Host "    🗑️ 删除旧备份: $($oldBackup.Name)" -ForegroundColor DarkGray
                 Remove-Item $oldBackup.FullName -Recurse -Force
             }
         }
@@ -247,7 +248,7 @@ function Clean-OldBackups {
     }
 
     $toDelete = $backups | Select-Object -Skip $maxBackups
-    Write-Host "    🗑️  将删除 $($toDelete.Count) 个旧备份:" -ForegroundColor Yellow
+    Write-Host "    🗑️ 将删除 $($toDelete.Count) 个旧备份:" -ForegroundColor Yellow
     Write-Host ""
 
     foreach ($backup in $toDelete) {
@@ -262,7 +263,7 @@ function Clean-OldBackups {
         Write-Host ""
         foreach ($backup in $toDelete) {
             Remove-Item $backup.FullName -Recurse -Force
-            Write-Host "    🗑️  已删除: $($backup.Name)" -ForegroundColor DarkGray
+            Write-Host "    🗑️ 已删除: $($backup.Name)" -ForegroundColor DarkGray
         }
         Write-Host ""
         Write-Host "    ✅ 清理完成!" -ForegroundColor Green

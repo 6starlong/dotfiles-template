@@ -34,7 +34,7 @@ function Show-ConflictOverviewOptions {
     if ($hasSourceConflicts) {
         Write-Host "    [s] 对所有冲突跳过同步" -ForegroundColor White
         Write-Host ""
-        Write-Host "    ⚠️  注意: 检测到多个配置指向相同源文件，不提供批量同步选项" -ForegroundColor Yellow
+        Write-Host "    ⚠️ 注意: 检测到多个配置指向相同源文件，不提供批量同步选项" -ForegroundColor Yellow
         Write-Host "    💡 建议使用 [d] 选项逐个处理以避免数据覆盖" -ForegroundColor Cyan
     } else {
         Write-Host "    [a] 对所有冲突使用 UserProfile" -ForegroundColor White
@@ -227,7 +227,7 @@ foreach ($link in $config.Links) {
         $sourcePath = Join-Path $dotfilesDir $link.Source
 
         if (-not (Test-Path $targetPath)) {
-            Write-Host "    ⚠️  文件不存在: $($link.Comment)" -ForegroundColor Yellow
+            Write-Host "    ⚠️ 文件不存在: $($link.Comment)" -ForegroundColor Yellow
             $skippedCount++
             continue
         }
@@ -299,7 +299,7 @@ foreach ($link in $config.Links) {
             # 无冲突或强制模式，直接同步
             if ($Silent -and $hasConflict) {
                 # 静默模式，默认跳过冲突
-                Write-Host "    ➡️  静默模式，跳过冲突: $($link.Comment)" -ForegroundColor Cyan
+                Write-Host "    ➡️ 静默模式，跳过冲突: $($link.Comment)" -ForegroundColor Cyan
                 $shouldSync = $false
             } else {
                 $shouldSync = $true  # 无冲突，直接同步
@@ -326,11 +326,11 @@ foreach ($link in $config.Links) {
             }
         } elseif (-not ($hasConflict -and -not $Force)) {
             # 只有非冲突的跳过才显示消息，冲突文件会在后面统一处理
-            Write-Host "    ➡️  跳过: $($link.Comment)" -ForegroundColor Cyan
+            Write-Host "    ➡️ 跳过: $($link.Comment)" -ForegroundColor Cyan
             $skippedCount++
         }
     } else {
-        Write-Host "    ➡️  跳过SymLink: $($link.Comment) (自动同步)" -ForegroundColor Cyan
+        Write-Host "    ➡️ 跳过SymLink: $($link.Comment) (自动同步)" -ForegroundColor Cyan
         $skippedCount++
     }
 }
@@ -338,7 +338,7 @@ foreach ($link in $config.Links) {
 # 第二阶段：处理所有冲突
 if ($conflictItems.Count -gt 0 -and -not $Silent) {
     Write-Host ""
-    Write-Host "    ⚠️  检测到 $($conflictItems.Count) 个冲突:" -ForegroundColor Yellow
+    Write-Host "    ⚠️ 检测到 $($conflictItems.Count) 个冲突:" -ForegroundColor Yellow
 
     # 显示所有冲突项
     for ($i = 0; $i -lt $conflictItems.Count; $i++) {
@@ -410,7 +410,7 @@ if ($conflictItems.Count -gt 0 -and -not $Silent) {
                     }
                     default {
                         # 跳过此文件
-                        Write-Host "    ➡️  跳过: $($conflictItem.Link.Comment)" -ForegroundColor Cyan
+                        Write-Host "    ➡️ 跳过: $($conflictItem.Link.Comment)" -ForegroundColor Cyan
                         $skippedCount++
                     }
                 }
@@ -423,7 +423,7 @@ if ($conflictItems.Count -gt 0 -and -not $Silent) {
                 Write-Host "    ❌ 无效选择: 存在多个配置指向相同源文件，无法批量同步" -ForegroundColor Red
                 Write-Host "    💡 请使用 [d] 选项逐个处理冲突" -ForegroundColor Cyan
                 Write-Host ""
-                Write-Host "    ➡️  自动跳过所有冲突文件" -ForegroundColor Cyan
+                Write-Host "    ➡️ 自动跳过所有冲突文件" -ForegroundColor Cyan
                 $skippedCount += $conflictItems.Count
             } else {
                 Write-Host ""
@@ -440,7 +440,7 @@ if ($conflictItems.Count -gt 0 -and -not $Silent) {
         default {
             # 跳过所有冲突
             Write-Host ""
-            Write-Host "    ➡️  跳过所有冲突文件" -ForegroundColor Cyan
+            Write-Host "    ➡️ 跳过所有冲突文件" -ForegroundColor Cyan
             $skippedCount += $conflictItems.Count
         }
     }
@@ -451,7 +451,7 @@ Write-Host "    🎉 同步完成!" -ForegroundColor Green
 Write-Host "    📊 同步了 $syncedCount 个配置文件，跳过 $skippedCount 个" -ForegroundColor Green
 
 if ($conflictCount -gt 0) {
-    Write-Host "    ⚠️  处理了 $conflictCount 个冲突" -ForegroundColor Yellow
+    Write-Host "    ⚠️ 处理了 $conflictCount 个冲突" -ForegroundColor Yellow
 }
 
 if ($syncedCount -gt 0) {

@@ -38,7 +38,7 @@ foreach ($link in $config.Links) {
     if (-not (Test-Path $targetPath)) {
         Write-Host "    ❌ $configName $methodTag 未部署" -ForegroundColor Red
     } elseif (-not (Test-Path $sourcePath)) {
-        Write-Host "    ⚠️  $configName $methodTag 源文件缺失" -ForegroundColor Yellow
+        Write-Host "    ⚠️ $configName $methodTag 源文件缺失" -ForegroundColor Yellow
     } else {
         $item = Get-Item $targetPath -Force
         
@@ -48,7 +48,7 @@ foreach ($link in $config.Links) {
             if ($target -and $target[0] -eq $sourcePath) {
                 Write-Host "    ✅ $configName $methodTag 已同步" -ForegroundColor Green
             } elseif ($target) {
-                Write-Host "    ⚠️  $configName $methodTag 链接错误" -ForegroundColor Yellow
+                Write-Host "    ⚠️ $configName $methodTag 链接错误" -ForegroundColor Yellow
             } else {
                 Write-Host "    ❌ $configName $methodTag 链接损坏" -ForegroundColor Red
             }
@@ -62,7 +62,7 @@ foreach ($link in $config.Links) {
                     if ($sourceContent -eq $targetContent) {
                         Write-Host "    ✅ $configName $methodTag 已同步" -ForegroundColor Cyan
                     } else {
-                        Write-Host "    ⚠️  $configName $methodTag 未同步" -ForegroundColor Yellow
+                        Write-Host "    ⚠️ $configName $methodTag 未同步" -ForegroundColor Yellow
                     }
                 } catch {
                     Write-Host "    ❌ $configName $methodTag 检查失败" -ForegroundColor Red
@@ -94,7 +94,7 @@ foreach ($link in $config.Links) {
                         if ($convertedContent -eq $targetContent) {
                             Write-Host "    ✅ $configName $methodTag 已同步" -ForegroundColor Cyan
                         } else {
-                            Write-Host "    ⚠️  $configName $methodTag 未同步" -ForegroundColor Yellow
+                            Write-Host "    ⚠️ $configName $methodTag 未同步" -ForegroundColor Yellow
                         }
                     } finally {
                         if (Test-Path $tempFile) {
@@ -105,7 +105,7 @@ foreach ($link in $config.Links) {
                     Write-Host "    ❌ $configName $methodTag 检查失败: $($_.Exception.Message)" -ForegroundColor Red
                 }
             } else {
-                Write-Host "    ⚠️  $configName $methodTag 应为链接" -ForegroundColor Yellow
+                Write-Host "    ⚠️ $configName $methodTag 应为链接" -ForegroundColor Yellow
             }
         }
     }
