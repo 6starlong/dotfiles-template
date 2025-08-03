@@ -45,7 +45,7 @@
             Source  = "test\demo.txt"
             Target  = "D:\Projects\dotfiles\test\demo1.txt"
             Comment = "Test 1"
-            Method  = "Copy"
+            Method  = "SymLink"
         }
 
         @{

@@ -137,7 +137,7 @@ try {
     $sourceObject = ConvertFrom-Jsonc -Content $sourceContent
 
     # 确定转换方向的键名
-    $sourceKey, $targetKey = if ($Reverse) { 
+    $sourceKey, $targetKey = if ($Reverse) {
         $platformField, $defaultField 
     } else { 
         $defaultField, $platformField 
@@ -167,9 +167,24 @@ try {
         }
     }
 
-    # 合并数据
-    $objectToMerge = [pscustomobject]@{ ($targetKey) = $dataToTransform }
-    $resultObject = Merge-Objects -Destination $resultObject -Source $objectToMerge
+    # 从源对象复制所有非转换字段到结果对象
+    foreach ($prop in $sourceObject.psobject.Properties) {
+        if ($prop.Name -ne $sourceKey) {
+            # 保留所有非转换字段
+            if ($resultObject.psobject.Properties[$prop.Name]) {
+                $resultObject.psobject.Properties[$prop.Name].Value = $prop.Value
+            } else {
+                Add-Member -InputObject $resultObject -MemberType NoteProperty -Name $prop.Name -Value $prop.Value
+            }
+        }
+    }
+
+    # 添加或更新转换后的字段
+    if ($resultObject.psobject.Properties[$targetKey]) {
+        $resultObject.psobject.Properties[$targetKey].Value = $dataToTransform
+    } else {
+        Add-Member -InputObject $resultObject -MemberType NoteProperty -Name $targetKey -Value $dataToTransform
+    }
 
     # 生成最终JSON（统一使用ConvertTo-Json确保格式一致性）
     $rawJson = $resultObject | ConvertTo-Json -Depth 100 -Compress:$false

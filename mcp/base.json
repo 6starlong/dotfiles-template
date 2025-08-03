@@ -1,5 +1,6 @@
 ﻿{
   "mcpServers": [
+    // 这是一个注释
     {
       "name": "filesystem",
       "command": "node",
@@ -24,5 +25,6 @@
       ],
       "env": {}
     }
-  ]
+  ],
+  "version": 1
 }

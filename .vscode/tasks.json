@@ -15,8 +15,7 @@
         "isDefault": true
       },
       "presentation": {
-        "reveal": "always",
-        "focus": true
+        "reveal": "silent"
       },
       "problemMatcher": []
     },
