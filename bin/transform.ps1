@@ -1,237 +1,190 @@
 ﻿# transform.ps1
-# 通用配置文件格式转换工具
-# 支持多种格式和平台的配置文件转换
-#
-# 功能特性：
-# - 支持多种配置格式（通过配置文件扩展）
-# - 保持原有文件格式（缩进、换行等）
-# - 支持正向和反向转换
-# - 可配置的字段映射和格式选项
+# 通用 JSON 配置文件格式转换工具
+# 支持智能合并，保持源文件格式和字段顺序
 
 param(
     [Parameter(Mandatory = $true)]
     [string]$SourceFile,
-
     [Parameter(Mandatory = $true)]
     [string]$TargetFile,
-
     [Parameter(Mandatory = $true)]
     [string]$TransformType,
-
     [switch]$Reverse
 )
 
-# 全局变量
+$TransformType = $TransformType.Trim("'", '"')
+$ErrorActionPreference = 'Stop'
 $script:DotfilesDir = Split-Path $PSScriptRoot -Parent
-$script:ConfigCache = @{}
 
-# 通用配置加载函数
+# 将JSONC内容转换为JSON对象
+function ConvertFrom-Jsonc {
+    param ([string]$Content)
+    # 移除块注释和行注释
+    $cleanContent = $Content -replace '(?s)/\*.*?\*/' -replace '(?m)//.*$'
+    return $cleanContent | ConvertFrom-Json
+}
+
+# 智能合并对象，保持原有结构
+function Merge-Objects {
+    param ($Destination, $Source)
+    
+    # 确保参数不为null
+    if (-not $Destination) { $Destination = [pscustomobject]@{} }
+    if (-not $Source) { return $Destination }
+    
+    foreach ($prop in $Source.psobject.Properties) {
+        $key = $prop.Name
+        $sourceValue = $prop.Value
+        $destinationProperty = $Destination.psobject.Properties[$key]
+        
+        # 如果目标已存在此键且都是复杂对象，递归合并
+        if ($destinationProperty -and 
+            $destinationProperty.Value -is [psobject] -and 
+            $sourceValue -is [psobject] -and
+            $destinationProperty.Value.GetType().Name -eq 'PSCustomObject' -and
+            $sourceValue.GetType().Name -eq 'PSCustomObject') {
+            Merge-Objects -Destination $destinationProperty.Value -Source $sourceValue
+        }
+        else {
+            # 直接替换或添加新属性
+            if ($destinationProperty) { 
+                $destinationProperty.Value = $sourceValue 
+            }
+            else { 
+                Add-Member -InputObject $Destination -MemberType NoteProperty -Name $key -Value $sourceValue 
+            }
+        }
+    }
+    return $Destination
+}
+
+# 获取转换配置
 function Get-TransformConfig {
-    param(
-        [string]$Format
-    )
-
-    if ($script:ConfigCache.ContainsKey($Format)) {
-        return $script:ConfigCache[$Format]
-    }
-
+    param([string]$Format)
     $configPath = Join-Path $script:DotfilesDir "$Format\platforms.json"
-    if (-not (Test-Path $configPath)) {
-        throw "格式配置文件未找到: $configPath"
+    if (-not (Test-Path $configPath)) { 
+        throw "配置文件未找到: $configPath" 
     }
-
-    $config = Get-Content $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    $script:ConfigCache[$Format] = $config
-    return $config
+    $configContent = Get-Content $configPath -Raw -Encoding UTF8
+    return ConvertFrom-Jsonc -Content $configContent
 }
 
-# 通用字段映射函数
-function Get-FieldMapping {
-    param(
-        [string]$Format,
-        [string]$Platform,
-        [bool]$IsReverse = $false
-    )
-
-    $config = Get-TransformConfig -Format $Format
-
-    # 获取平台的字段映射，如果没有则使用默认映射
-    $platformMapping = if ($config.mappings.$Platform) {
-        $config.mappings.$Platform
-    } else {
-        $config.default
-    }
-
-    # 合并默认映射和平台特定映射
-    $finalMapping = @{}
-
-    # 先添加默认映射
-    if ($config.default) {
-        $config.default.PSObject.Properties | ForEach-Object {
-            $finalMapping[$_.Name] = $_.Value
+# 清理和标准化JSON格式
+function Format-JsonClean {
+    param([string]$JsonString, [int]$Indent = 2)
+    
+    # 移除PowerShell的多余空格和奇怪格式
+    $cleanJson = $JsonString -replace '\s*:\s*\[\s*\]', ': []'
+    $cleanJson = $cleanJson -replace '\s*:\s*\{\s*\}', ': {}'
+    $cleanJson = $cleanJson -replace ':\s+\[', ': ['
+    $cleanJson = $cleanJson -replace ':\s+\{', ': {'
+    $cleanJson = $cleanJson -replace ':\s+(["\d\[\{])', ': $1'
+    $cleanJson = $cleanJson -replace '(?m)^\s*$\n', ''
+    
+    # 重新格式化缩进
+    $lines = $cleanJson -split "`r?`n"
+    $result = @()
+    $currentIndent = 0
+    
+    foreach ($line in $lines) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed) { continue }
+        
+        # 调整缩进级别
+        if ($trimmed -match '^[\}\]]') {
+            $currentIndent = [Math]::Max(0, $currentIndent - 1)
+        }
+        
+        # 添加正确缩进的行
+        $result += (' ' * ($currentIndent * $Indent)) + $trimmed
+        
+        # 为下一行调整缩进
+        if ($trimmed -match '[\{\[]$') {
+            $currentIndent++
         }
     }
-
-    # 再添加平台特定映射（会覆盖默认值）
-    # 注意：如果平台映射不存在，则使用默认映射
-    if ($platformMapping -and $platformMapping -ne $config.default) {
-        $platformMapping.PSObject.Properties | ForEach-Object {
-            $finalMapping[$_.Name] = $_.Value
-        }
-    }
-
-    return $finalMapping
-}
-
-# 通用内容转换函数
-function Convert-ConfigContent {
-    param(
-        [object]$Content,
-        [string]$Format,
-        [string]$Platform,
-        [bool]$IsReverse = $false
-    )
-
-    $mapping = Get-FieldMapping -Format $Format -Platform $Platform -IsReverse $IsReverse
-    $result = @{}
-
-    if ($IsReverse) {
-        # 反向转换：从平台格式转换回基础格式
-        foreach ($baseField in $mapping.Keys) {
-            $platformField = $mapping[$baseField]
-            if ($Content.$platformField) {
-                $result.$baseField = $Content.$platformField
-            }
-        }
-    } else {
-        # 正向转换：从基础格式转换到平台格式
-        foreach ($baseField in $mapping.Keys) {
-            $platformField = $mapping[$baseField]
-            if ($Content.$baseField) {
-                $result.$platformField = $Content.$baseField
-            }
-        }
-    }
-
-    return $result
-}
-
-# 通用格式保持转换函数
-function Convert-WithFormatPreservation {
-    param(
-        [string]$SourceContent,
-        [string]$Format,
-        [string]$Platform,
-        [bool]$IsReverse = $false
-    )
-
-    $mapping = Get-FieldMapping -Format $Format -Platform $Platform -IsReverse $IsReverse
-    $result = $SourceContent
-
-    if ($IsReverse) {
-        # 反向转换：将平台字段名替换为基础字段名
-        foreach ($baseField in $mapping.Keys) {
-            $platformField = $mapping[$baseField]
-            if ($platformField -ne $baseField) {
-                $searchPattern = '"' + $platformField + '":'
-                $replacePattern = '"' + $baseField + '":'
-                $result = $result.Replace($searchPattern, $replacePattern)
-            }
-        }
-    } else {
-        # 正向转换：将基础字段名替换为平台字段名
-        foreach ($baseField in $mapping.Keys) {
-            $platformField = $mapping[$baseField]
-            if ($baseField -ne $platformField) {
-                $searchPattern = '"' + $baseField + '":'
-                $replacePattern = '"' + $platformField + '":'
-                $result = $result.Replace($searchPattern, $replacePattern)
-            }
-        }
-    }
-
-    return $result
-}
-
-# 通用JSON格式化函数
-function Format-JsonOutput {
-    param(
-        [object]$Content,
-        [string]$Format
-    )
-
-    $config = Get-TransformConfig -Format $Format
-
-    # 使用配置中的格式设置，如果没有则使用默认值
-    $indent = if ($config.formatting -and $config.formatting.indent) {
-        $config.formatting.indent
-    } else {
-        2  # 默认2个空格缩进
-    }
-
-    $jsonOutput = $Content | ConvertTo-Json -Depth 10
-
-    # 转换缩进
-    if ($indent -ne 4) {
-        $indentString = ' ' * $indent
-        $jsonOutput = $jsonOutput -replace '    ', $indentString
-    }
-
-    return $jsonOutput
+    
+    return $result -join [System.Environment]::NewLine
 }
 
 try {
-    if (-not (Test-Path $SourceFile)) {
-        throw "输入文件不存在: $SourceFile"
-    }
-
-    # 解析转换类型 (format:platform)
+    # 解析转换类型参数
     $parts = $TransformType -split ":"
-    if ($parts.Length -ne 2) {
-        throw "转换类型格式错误。应为 'format:platform'，如 'mcp:vscode'"
+    if ($parts.Length -ne 2) { 
+        throw "无效的转换类型格式。预期格式为'format:platform'。" 
     }
-
     $format = $parts[0]
     $platform = $parts[1]
 
-    # 验证格式配置是否存在
-    $formatConfigPath = Join-Path $script:DotfilesDir "$format\platforms.json"
-    if (-not (Test-Path $formatConfigPath)) {
-        throw "不支持的转换格式: $format (配置文件不存在: $formatConfigPath)"
+    # 获取配置并确定字段映射
+    $config = Get-TransformConfig -Format $format
+    $defaultField = $config.defaultField
+    $platformField = if ($config.platforms.psobject.Properties[$platform]) { 
+        $config.platforms.$platform 
+    } else { 
+        $config.defaultField 
     }
 
-    # 读取源文件内容
+    if (-not $defaultField -or -not $platformField) { 
+        throw "无法确定默认字段或平台字段。" 
+    }
+
+    # 检查并读取源文件
+    if (-not (Test-Path $SourceFile)) { 
+        throw "源文件未找到: $SourceFile" 
+    }
     $sourceContent = Get-Content $SourceFile -Raw -Encoding UTF8
-    $content = $sourceContent | ConvertFrom-Json
+    $sourceObject = ConvertFrom-Jsonc -Content $sourceContent
 
-    # 获取格式配置
-    $config = Get-TransformConfig -Format $format
+    # 确定转换方向的键名
+    $sourceKey, $targetKey = if ($Reverse) { 
+        $platformField, $defaultField 
+    } else { 
+        $defaultField, $platformField 
+    }
+    
+    # 验证源文件包含所需的键
+    if (-not $sourceObject.psobject.Properties[$sourceKey]) {
+        Write-Warning "源文件'$SourceFile'不包含键'$sourceKey'。"
+        exit 0
+    }
+    $dataToTransform = $sourceObject.$sourceKey
 
-    # 确保输出目录存在
+    # 准备目标对象（安全处理空文件和无效JSON）
+    $resultObject = [pscustomobject]@{}
+    if (Test-Path $TargetFile) {
+        try {
+            $targetContent = Get-Content $TargetFile -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
+            if ($targetContent -and $targetContent.Trim()) { 
+                $targetObject = ConvertFrom-Jsonc -Content $targetContent
+                if ($targetObject) {
+                    $resultObject = $targetObject
+                }
+            }
+        }
+        catch {
+            Write-Warning "目标文件'$TargetFile'格式无效，将创建新文件"
+        }
+    }
+
+    # 合并数据
+    $objectToMerge = [pscustomobject]@{ ($targetKey) = $dataToTransform }
+    $resultObject = Merge-Objects -Destination $resultObject -Source $objectToMerge
+
+    # 生成最终JSON（统一使用ConvertTo-Json确保格式一致性）
+    $rawJson = $resultObject | ConvertTo-Json -Depth 100 -Compress:$false
+    $finalJson = Format-JsonClean -JsonString $rawJson -Indent 2
+
+    # 确保输出目录存在并写入文件
     $outputDir = Split-Path $TargetFile -Parent
     if ($outputDir -and -not (Test-Path $outputDir)) {
         New-Item -Path $outputDir -ItemType Directory -Force | Out-Null
     }
+    Set-Content -Path $TargetFile -Value ($finalJson + [System.Environment]::NewLine) -Encoding UTF8 -NoNewline
 
-    # 根据配置决定转换方式
-    $preserveFormat = if ($config.preserveFormat -ne $null) {
-        $config.preserveFormat
-    } else {
-        $true  # 默认保持格式
-    }
-
-    if ($preserveFormat) {
-        # 保持原有格式，使用字符串替换
-        $finalOutput = Convert-WithFormatPreservation -SourceContent $sourceContent -Format $format -Platform $platform -IsReverse:$Reverse
-    } else {
-        # 使用JSON重新格式化
-        $convertedContent = Convert-ConfigContent -Content $content -Format $format -Platform $platform -IsReverse:$Reverse
-        $finalOutput = Format-JsonOutput -Content $convertedContent -Format $format
-    }
-
-    # 写入文件，保持UTF8编码
-    $finalOutput | Set-Content $TargetFile -Encoding UTF8 -NoNewline
-} catch {
+    Write-Host "转换成功: '$SourceFile' -> '$TargetFile'" -ForegroundColor Green
+}
+catch {
     Write-Error "转换失败: $($_.Exception.Message)"
     exit 1
 }

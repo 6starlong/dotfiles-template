@@ -43,14 +43,14 @@
         # Test 配置
         @{
             Source  = "test\demo.txt"
-            Target  = "{USERPROFILE}\demo1.txt"
+            Target  = "D:\Projects\dotfiles\test\demo1.txt"
             Comment = "Test 1"
             Method  = "Copy"
         }
 
         @{
             Source  = "test\demo.txt"
-            Target  = "{USERPROFILE}\demo2.txt"
+            Target  = "D:\Projects\dotfiles\test\demo2.txt"
             Comment = "Test 2"
             Method  = "Copy"
         }
@@ -58,18 +58,34 @@
         # MCP 配置文件
         @{
             Source    = "mcp\base.json"
-            Target    = "{USERPROFILE}\AppData\Roaming\Code\User\mcp.json"
+            Target    = "D:\Projects\dotfiles\test\demo.json"
+            Comment   = "MCP Config for Demo"
+            Method    = "Transform"
+            Transform = "mcp:demo"
+        }
+
+        @{
+            Source    = "mcp\base.json"
+            Target    = "D:\Projects\dotfiles\test\vscode-mcp.json"
             Comment   = "MCP Config for VSCode"
             Method    = "Transform"
             Transform = "mcp:vscode"
         }
 
-        @{
-            Source    = "mcp\base.json"
-            Target    = "{USERPROFILE}\.cursor\mcp.json"
-            Comment   = "MCP Config for Cursor"
-            Method    = "Transform"
-            Transform = "mcp:cursor"
-        }
+        # @{
+        #     Source    = "mcp\base.json"
+        #     Target    = "{USERPROFILE}\AppData\Roaming\Code\User\mcp.json"
+        #     Comment   = "MCP Config for VSCode"
+        #     Method    = "Transform"
+        #     Transform = "mcp:vscode"
+        # }
+
+        # @{
+        #     Source    = "mcp\base.json"
+        #     Target    = "{USERPROFILE}\.cursor\mcp.json"
+        #     Comment   = "MCP Config for Cursor"
+        #     Method    = "Transform"
+        #     Transform = "mcp:cursor"
+        # }
     )
 }
