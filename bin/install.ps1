@@ -2,7 +2,10 @@
 # 根据 config.psd1 配置文件安装 dotfiles
 # 需要管理员权限来创建符号链接
 
+param([string]$LogFile)
+
 $dotfilesDir = Split-Path $PSScriptRoot -Parent
+$ErrorActionPreference = 'Stop'
 
 # 检查管理员权限
 function Test-Administrator {
@@ -11,17 +14,91 @@ function Test-Administrator {
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+# 输出函数：同时支持控制台显示和文件记录
+function Write-InstallResult {
+    param(
+        [string]$Message,
+        [string]$Color = "White"
+    )
+    
+    # 显示到控制台
+    if ($Message -eq "") {
+        Write-Host ""
+    } else {
+        Write-Host "    $Message" -ForegroundColor $Color
+    }
+    
+    # 写入日志文件（仅提权模式）
+    if ($LogFile) {
+        try {
+            if ($Message -eq "") {
+                "" | Out-File -FilePath $LogFile -Append -Encoding UTF8 -ErrorAction Stop
+            } else {
+                "$Color|$Message" | Out-File -FilePath $LogFile -Append -Encoding UTF8 -ErrorAction Stop
+            }
+        } catch {
+            Write-Host "    [警告] 写入日志文件失败: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+}
+
+# 非管理员模式：自动提权并显示结果
 if (-not (Test-Administrator)) {
-    Write-Host ""
-    Write-Host "    ❌ 此脚本需要管理员权限才能创建符号链接" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "    请复制以下命令并执行，它会在当前目录打开管理员权限的 PowerShell 窗口：" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "    Start-Process PowerShell -ArgumentList '-NoExit -Command Set-Location `"$PWD`"' -Verb RunAs" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "    然后在新窗口中执行：.\bin\install.ps1" -ForegroundColor Green
-    Write-Host ""
-    return
+    Write-Host "    ⚠️ 需要管理员权限创建符号链接" -ForegroundColor Yellow
+    Write-Host "    🔄 正在自动提权..." -ForegroundColor Cyan
+    
+    try {
+        # 创建临时日志文件
+        $logFile = Join-Path $env:TEMP "dotfiles_install_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
+        
+        # 启动提权进程
+        $argumentList = @(
+            "-NoProfile", "-ExecutionPolicy", "Bypass"
+            "-File", "`"$($MyInvocation.MyCommand.Path)`""
+            "-LogFile", "`"$logFile`""
+        )
+        $process = Start-Process "PowerShell" -ArgumentList $argumentList -Verb RunAs -WindowStyle Hidden -PassThru
+        $process.WaitForExit()
+        
+        # 等待并读取结果
+        $maxWait = 10
+        $waited = 0
+        while (-not (Test-Path $logFile) -and $waited -lt $maxWait) {
+            Start-Sleep -Milliseconds 500
+            $waited += 0.5
+        }
+        
+        if (Test-Path $logFile) {
+            $results = Get-Content $logFile -Encoding UTF8 -ErrorAction SilentlyContinue
+            if ($results -and $results.Count -gt 0) {
+                foreach ($result in $results) {
+                    if ($result -eq "") {
+                        Write-Host ""
+                    } elseif ($result -match "^([^|]+)\|(.+)$") {
+                        $color = $matches[1]
+                        $message = $matches[2]
+                        Write-Host "    $message" -ForegroundColor $color
+                    } else {
+                        Write-Host "    $result" -ForegroundColor White
+                    }
+                }
+            } else {
+                Write-Host "    ⚠️ 安装过程未生成输出，请检查是否成功" -ForegroundColor Yellow
+            }
+            Remove-Item $logFile -Force -ErrorAction SilentlyContinue
+        } else {
+            Write-Host "    ❌ 安装过程中出现问题，未生成日志文件" -ForegroundColor Red
+            Write-Host "    请手动以管理员身份运行: .\bin\install.ps1" -ForegroundColor Yellow
+        }
+        
+        Write-Host ""
+        return
+    } catch {
+        Write-Host "    ❌ 自动提权失败：$($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "    请手动以管理员身份运行：.\bin\install.ps1" -ForegroundColor Yellow
+        Write-Host ""
+        return
+    }
 }
 
 # 加载配置文件
@@ -32,40 +109,47 @@ if (-not (Test-Path $configFile)) {
 }
 $config = Import-PowerShellDataFile -Path $configFile
 
-Write-Host "    🚀 开始安装 dotfiles..." -ForegroundColor Yellow
-Write-Host ""
+Write-InstallResult ""
+Write-InstallResult "🚀 开始安装 dotfiles..." "Yellow"
+Write-InstallResult ""
 
-# 安装前创建备份
-Write-Host "    📦 正在创建现有配置的备份..." -ForegroundColor Cyan
+# 创建备份
+Write-InstallResult "📦 正在创建现有配置的备份..." "Cyan"
 $backupScript = Join-Path $PSScriptRoot "backup.ps1"
 if (Test-Path $backupScript) {
     try {
-        & $backupScript
-        Write-Host "    ✅ 备份完成" -ForegroundColor Green
+        $backupOutput = & $backupScript 2>&1
+        if ($LASTEXITCODE -eq 0 -or $? -eq $true) {
+            Write-InstallResult "✅ 备份完成" "Green"
+        } else {
+            Write-InstallResult "⚠️ 备份失败，但继续安装" "Yellow"
+        }
     } catch {
-        Write-Host "    ⚠️  备份失败，但继续安装: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-InstallResult "⚠️ 备份失败，但继续安装: $($_.Exception.Message)" "Yellow"
     }
-} else {
-    Write-Host "    ⚠️  未找到备份脚本，跳过备份" -ForegroundColor Yellow
 }
 
-Write-Host ""
-Write-Host "    🔗 正在安装 dotfiles 配置..." -ForegroundColor Cyan
-Write-Host ""
+Write-InstallResult ""
+Write-InstallResult "🔗 正在安装 dotfiles 配置..." "Cyan"
+Write-InstallResult ""
 
 # 处理配置链接
+$successCount = 0
+$failureCount = 0
+
 foreach ($link in $config.Links) {
     $sourcePath = Join-Path $dotfilesDir $link.Source
     $targetPath = $link.Target -replace '\{USERPROFILE\}', $env:USERPROFILE
 
     if (-not (Test-Path $sourcePath)) {
-        Write-Host "    ⚠️  跳过: 源文件未找到 '$sourcePath'" -ForegroundColor Yellow
+        Write-InstallResult "⚠️ 跳过: 源文件未找到 '$sourcePath'" "Yellow"
         continue
     }
 
+    # 创建目标目录
     $targetDir = Split-Path -Path $targetPath -Parent
     if (-not (Test-Path $targetDir)) {
-        Write-Host "    📁 正在创建目标目录: $targetDir" -ForegroundColor Gray
+        Write-InstallResult "📁 创建目标目录: $targetDir" "Gray"
         New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
     }
 
@@ -74,36 +158,51 @@ foreach ($link in $config.Links) {
     if (-not $method) { $method = "SymLink" }
 
     try {
-        if ($method -eq "Copy") {
-            Copy-Item -Path $sourcePath -Destination $targetPath -Force -ErrorAction Stop
-            Write-Host "    ✅ 已复制 ($($link.Comment)): $sourcePath -> $targetPath" -ForegroundColor Green
-        } elseif ($method -eq "Transform") {
-            # 使用转换脚本处理
-            if (-not $link.Transform) {
-                Write-Host "    ❌ Transform配置缺少Transform参数: $($link.Comment)" -ForegroundColor Red
-                continue
+        switch ($method) {
+            "Copy" {
+                Copy-Item -Path $sourcePath -Destination $targetPath -Force -ErrorAction Stop
+                Write-InstallResult "✅ 已复制 $($link.Comment)" "Green"
             }
-            
-            $transformScript = Join-Path $PSScriptRoot "transform.ps1"
-            if (-not (Test-Path $transformScript)) {
-                Write-Host "    ❌ 转换脚本未找到: $transformScript" -ForegroundColor Red
-                continue
+            "Transform" {
+                if (-not $link.Transform) {
+                    Write-InstallResult "❌ Transform配置缺少Transform参数: $($link.Comment)" "Red"
+                    $failureCount++
+                    continue
+                }
+                
+                $transformScript = Join-Path $PSScriptRoot "transform.ps1"
+                if (-not (Test-Path $transformScript)) {
+                    Write-InstallResult "❌ 转换脚本未找到: $transformScript" "Red"
+                    $failureCount++
+                    continue
+                }
+                
+                & $transformScript -SourceFile $sourcePath -TargetFile $targetPath -TransformType $link.Transform -ErrorAction Stop
+                Write-InstallResult "✅ 已转换 $($link.Comment)" "Green"
             }
-            
-            & $transformScript -SourceFile $sourcePath -TargetFile $targetPath -TransformType $link.Transform -ErrorAction Stop
-            Write-Host "    ✅ 已转换 ($($link.Comment)): $sourcePath -> $targetPath" -ForegroundColor Green
-        } else {
-            New-Item -ItemType SymbolicLink -Path $targetPath -Target $sourcePath -Force -ErrorAction Stop | Out-Null
-            Write-Host "    ✅ 已链接 ($($link.Comment)): $targetPath -> $sourcePath" -ForegroundColor Green
+            default {
+                New-Item -ItemType SymbolicLink -Path $targetPath -Target $sourcePath -Force -ErrorAction Stop | Out-Null
+                Write-InstallResult "✅ 已链接 $($link.Comment)" "Green"
+            }
         }
+        $successCount++
     } catch {
-        Write-Host "    ❌ 部署失败 $($link.Comment)，方法 '$method'。错误: $($_.Exception.Message)" -ForegroundColor Red
+        Write-InstallResult "❌ 部署失败 $($link.Comment): $($_.Exception.Message)" "Red"
         if ($method -eq "SymLink") {
-            Write-Host "    💡 提示: 创建符号链接需要管理员权限" -ForegroundColor Yellow
+            Write-InstallResult "💡 提示: 创建符号链接需要管理员权限" "Yellow"
         }
+        $failureCount++
     }
 }
 
-Write-Host ""
-Write-Host "    ✨ Dotfiles 安装完成！" -ForegroundColor Green
-Write-Host ""
+# 显示结果
+Write-InstallResult ""
+if ($failureCount -eq 0) {
+    Write-InstallResult "✨ Dotfiles 安装完成！" "Green"
+} elseif ($successCount -gt 0) {
+    Write-InstallResult "⚠️ Dotfiles 安装部分完成（$successCount 成功，$failureCount 失败）" "Yellow"
+} else {
+    Write-InstallResult "❌ Dotfiles 安装失败！" "Red"
+}
+Write-InstallResult "📊 处理了 $($successCount + $failureCount) 个配置项" "Green"
+Write-host ""

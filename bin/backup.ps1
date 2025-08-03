@@ -128,8 +128,7 @@ function Create-Backup {
     }
 
     Write-Host ""
-    Write-Host "    🎉 备份完成!" -ForegroundColor Green
-    Write-Host "    📊 备份了 $backedUpCount 个配置文件" -ForegroundColor Green
+    Write-Host "    🎉 备份了 $backedUpCount 个配置文件" -ForegroundColor Green
     Write-Host "    📁 备份位置: $backupPath" -ForegroundColor Green
     Write-Host ""
 }

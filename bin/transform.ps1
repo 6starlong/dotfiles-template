@@ -181,10 +181,8 @@ try {
         New-Item -Path $outputDir -ItemType Directory -Force | Out-Null
     }
     Set-Content -Path $TargetFile -Value ($finalJson + [System.Environment]::NewLine) -Encoding UTF8 -NoNewline
-
-    Write-Host "转换成功: '$SourceFile' -> '$TargetFile'" -ForegroundColor Green
 }
 catch {
-    Write-Error "转换失败: $($_.Exception.Message)"
+    Write-Error "    转换失败: $($_.Exception.Message)"
     exit 1
 }
