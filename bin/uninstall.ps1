@@ -145,10 +145,10 @@ try {
         }
 
         try {
-            if ($method -eq "Transform" -and $link.Transform) {
+            if ($method -eq "Transform" -and $link.MappingId) {
                 # 智能移除 JSON 字段
                 $sourcePath = Join-Path $script:DotfilesDir $link.Source
-                $result = Remove-JsonField -FilePath $targetPath -TransformType $link.Transform -SourceFile $sourcePath
+                $result = Remove-JsonField -FilePath $targetPath -TransformType $link.MappingId -SourceFile $sourcePath
                 if ($result) {
                     if (Test-Path $targetPath) {
                         Write-Host "    🧹 已清理字段 ($($link.Comment)): $targetPath" -ForegroundColor Yellow

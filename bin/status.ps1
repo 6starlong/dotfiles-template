@@ -70,8 +70,8 @@ foreach ($link in $config.Links) {
             } elseif ($method -eq "Transform") {
                 try {
                     # 对于Transform方法，需要比较转换后的内容
-                    if (-not $link.Transform) {
-                        Write-Host "    ❌ $configName $methodTag Transform参数缺失" -ForegroundColor Red
+                    if (-not $link.MappingId) {
+                        Write-Host "    ❌ $configName $methodTag MappingId参数缺失" -ForegroundColor Red
                         continue
                     }
                     
@@ -85,7 +85,7 @@ foreach ($link in $config.Links) {
                         }
                         
                         # 转换基础配置到临时文件
-                        & $transformScript -SourceFile $sourcePath -TargetFile $tempFile -TransformType $link.Transform -ErrorAction Stop | Out-Null
+                        & $transformScript -SourceFile $sourcePath -TargetFile $tempFile -TransformType $link.MappingId -ErrorAction Stop | Out-Null
                         
                         # 比较转换后的内容与目标文件
                         $convertedContent = Get-Content $tempFile -Raw -ErrorAction Stop

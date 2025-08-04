@@ -10,6 +10,7 @@
 # - Target: 目标路径（使用 {USERPROFILE} 占位符）
 # - Comment: 配置描述
 # - Method: 部署方法 "SymLink"（默认）或 "Copy" 或 "Transform"
+# - MappingId: 映射标识符，用于区分多个目标指向同一源的情况，也用于临时文件命名
 
 @{
     # 默认部署方法
@@ -17,6 +18,12 @@
     # "Copy" - 直接复制文件（适用于会被应用修改的配置）
     # "Transform" - 转换格式后复制（适用于需要格式转换的配置）
     DefaultMethod = "SymLink"
+
+    # 项目配置
+    ProjectSettings = @{
+        # 项目前缀，用于临时文件命名
+        ProjectPrefix = "dotfiles"
+    }
 
     # 备份配置
     BackupSettings = @{
@@ -45,7 +52,7 @@
             Source  = "test\demo.txt"
             Target  = "D:\Projects\dotfiles\test\demo1.txt"
             Comment = "Test 1"
-            Method  = "SymLink"
+            Method  = "Copy"
         }
 
         @{
@@ -61,7 +68,7 @@
             Target    = "D:\Projects\dotfiles\test\demo.json"
             Comment   = "MCP Config for Demo"
             Method    = "Transform"
-            Transform = "mcp:demo"
+            MappingId = "mcp:demo"
         }
 
         @{
@@ -69,7 +76,7 @@
             Target    = "D:\Projects\dotfiles\test\vscode-mcp.json"
             Comment   = "MCP Config for VSCode"
             Method    = "Transform"
-            Transform = "mcp:vscode"
+            MappingId = "mcp:vscode"
         }
 
         # @{
@@ -77,7 +84,7 @@
         #     Target    = "{USERPROFILE}\AppData\Roaming\Code\User\mcp.json"
         #     Comment   = "MCP Config for VSCode"
         #     Method    = "Transform"
-        #     Transform = "mcp:vscode"
+        #     MappingId = "mcp:vscode"
         # }
 
         # @{
@@ -85,7 +92,7 @@
         #     Target    = "{USERPROFILE}\.cursor\mcp.json"
         #     Comment   = "MCP Config for Cursor"
         #     Method    = "Transform"
-        #     Transform = "mcp:cursor"
+        #     MappingId = "mcp:cursor"
         # }
     )
 }

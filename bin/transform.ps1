@@ -91,7 +91,7 @@ try {
     
     # 验证源文件包含所需的键
     if (-not $sourceObject.psobject.Properties[$sourceKey]) {
-        Write-Warning "源文件'$SourceFile'不包含键'$sourceKey'。"
+        # 如果源文件不包含所需字段，静默退出，让冲突检测处理
         exit 0
     }
     $dataToTransform = $sourceObject.$sourceKey

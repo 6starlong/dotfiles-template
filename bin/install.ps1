@@ -164,8 +164,8 @@ foreach ($link in $config.Links) {
                 Write-InstallResult "✅ 已复制 $($link.Comment)" "Green"
             }
             "Transform" {
-                if (-not $link.Transform) {
-                    Write-InstallResult "❌ Transform配置缺少Transform参数: $($link.Comment)" "Red"
+                if (-not $link.MappingId) {
+                    Write-InstallResult "❌ Transform配置缺少MappingId参数: $($link.Comment)" "Red"
                     $failureCount++
                     continue
                 }
@@ -177,7 +177,7 @@ foreach ($link in $config.Links) {
                     continue
                 }
                 
-                & $transformScript -SourceFile $sourcePath -TargetFile $targetPath -TransformType $link.Transform -ErrorAction Stop
+                & $transformScript -SourceFile $sourcePath -TargetFile $targetPath -TransformType $link.MappingId -ErrorAction Stop
                 Write-InstallResult "✅ 已转换 $($link.Comment)" "Green"
             }
             default {
