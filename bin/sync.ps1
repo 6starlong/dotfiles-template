@@ -390,7 +390,7 @@ function Process-ConfigLink {
 
     # 只处理 Copy 和 Transform 方法
     if ($method -ne "Copy" -and $method -ne "Transform") {
-        Write-Host "    ➡️ 跳过SymLink: $($Link.Comment) (自动同步)" -ForegroundColor Cyan
+        Write-Host "    ⏩ 跳过SymLink: $($Link.Comment) (自动同步)" -ForegroundColor Cyan
         $SkippedCount.Value++
         return
     }
@@ -422,7 +422,7 @@ function Process-ConfigLink {
         $shouldSync = $true
 
         if ($script:Silent -and $hasConflict) {
-            Write-Host "    ➡️ 静默模式，跳过冲突: $($Link.Comment)" -ForegroundColor Cyan
+            Write-Host "    ⏩ 静默模式，跳过冲突: $($Link.Comment)" -ForegroundColor Cyan
             $shouldSync = $false
         }
 
@@ -540,7 +540,7 @@ function Process-IndividualConflicts {
                 }
             }
             "2" {
-                Write-Host "    ➡️ 跳过: $($conflictItem.Link.Comment)" -ForegroundColor Cyan
+                Write-Host "    ⏩ 跳过: $($conflictItem.Link.Comment)" -ForegroundColor Cyan
                 $SkippedCount.Value++
             }
             default {
@@ -574,9 +574,9 @@ function Process-BatchConflictResolution {
         }
         "SkipAll" {
             Write-Host ""
-            Write-Host "    ➡️ 跳过所有冲突文件..." -ForegroundColor Cyan
+            Write-Host "    ⏩ 跳过所有冲突文件..." -ForegroundColor Cyan
             foreach ($conflictItem in $ConflictItems) {
-                Write-Host "    ➡️ 跳过: $($conflictItem.Link.Comment)" -ForegroundColor Cyan
+                Write-Host "    ⏩ 跳过: $($conflictItem.Link.Comment)" -ForegroundColor Cyan
                 $SkippedCount.Value++
             }
         }
@@ -594,7 +594,7 @@ function Show-SyncSummary {
     Write-Host ""
     Write-Host "    📊 同步完成!" -ForegroundColor Green
     Write-Host "    ✅ 已同步: $SyncedCount 个文件" -ForegroundColor Green
-    Write-Host "    ➡️ 已跳过: $SkippedCount 个文件" -ForegroundColor Cyan
+    Write-Host "    ⏩ 已跳过: $SkippedCount 个文件" -ForegroundColor Cyan
     if ($ConflictCount -gt 0) {
         Write-Host "    ⚠️ 冲突数: $ConflictCount 个文件" -ForegroundColor Yellow
     }

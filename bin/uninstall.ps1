@@ -139,7 +139,7 @@ try {
         $method = if ($link.Method) { $link.Method } else { $config.DefaultMethod }
 
         if (-not (Test-Path $targetPath)) {
-            Write-Host "    ➡️ 跳过 ($($link.Comment)): 文件不存在" -ForegroundColor Cyan
+            Write-Host "    ⏩ 跳过 ($($link.Comment)): 文件不存在" -ForegroundColor Cyan
             $skippedCount++
             continue
         }
@@ -158,7 +158,7 @@ try {
                         $removedCount++
                     }
                 } else {
-                    Write-Host "    ➡️ 跳过 ($($link.Comment)): 未找到管理的字段" -ForegroundColor Cyan
+                    Write-Host "    ⏩ 跳过 ($($link.Comment)): 未找到管理的字段" -ForegroundColor Cyan
                     $skippedCount++
                 }
             } else {
