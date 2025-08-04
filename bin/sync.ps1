@@ -231,26 +231,26 @@ function Invoke-VSCodeDiff {
         "dotfiles"
     }
     
-    # 构建目标文件名：[项目前缀]-[映射ID]_current.[扩展名]
+    # 构建目标文件名：[项目前缀]_[映射ID]_current.[扩展名]
     $targetExtension = [System.IO.Path]::GetExtension($ConflictItem.TargetPath)
     if ($ConflictItem.Link.MappingId) {
         # 有映射ID的情况，使用映射ID（替换 : 为 -）
         $cleanMappingId = $ConflictItem.Link.MappingId -replace ":", "-"
-        $tempUserFile = Join-Path $tempDir "$projectPrefix-$cleanMappingId`_current$targetExtension"
+        $tempUserFile = Join-Path $tempDir "$projectPrefix`_$cleanMappingId`_current$targetExtension"
     } else {
         # 没有映射ID的情况，使用目标文件名
         $targetBaseName = [System.IO.Path]::GetFileNameWithoutExtension($ConflictItem.TargetPath)
-        $tempUserFile = Join-Path $tempDir "$projectPrefix-$targetBaseName`_current$targetExtension"
+        $tempUserFile = Join-Path $tempDir  "$projectPrefix`_$targetBaseName`_current$targetExtension"
     }
     
-    # 构建源文件名：[项目前缀]-[文件路径]_target.[扩展名]
+    # 构建源文件名：[项目前缀]_[文件路径]_target.[扩展名]
     $sourceExtension = [System.IO.Path]::GetExtension($ConflictItem.SourcePath)
     $sourceRelativePath = $ConflictItem.Link.Source -replace "[\\/]", "-"
     # 移除扩展名以避免重复（更精确的移除方式）
     if ($sourceRelativePath.EndsWith($sourceExtension)) {
         $sourceRelativePath = $sourceRelativePath.Substring(0, $sourceRelativePath.Length - $sourceExtension.Length)
     }
-    $tempDotfilesFile = Join-Path $tempDir "$projectPrefix-$sourceRelativePath`_target$sourceExtension"
+    $tempDotfilesFile = Join-Path $tempDir "$projectPrefix`_$sourceRelativePath`_target$sourceExtension"
 
     try {
         # 准备文件内容用于比较

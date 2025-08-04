@@ -14,7 +14,7 @@
 
 @{
     # 默认部署方法
-    # "SymLink" - 创建符号链接（推荐）
+    # "SymLink" - 创建符号链接
     # "Copy" - 直接复制文件（适用于会被应用修改的配置）
     # "Transform" - 转换格式后复制（适用于需要格式转换的配置）
     DefaultMethod = "SymLink"
@@ -40,26 +40,28 @@
     # 配置链接
     Links = @(
         # 示例格式：
-        # @{
-        #     Source  = "源文件路径"
-        #     Target  = "{USERPROFILE}\目标路径"
-        #     Comment = "配置描述"
-        #     Method  = "SymLink" # 或 "Copy"
-        # }
+        @{
+            Source    = "path\to\source.ext"                # 源文件路径
+            Target    = "{USERPROFILE}\path\to\target.ext"  # 目标路径
+            Comment   = "Config description"                # 配置描述
+            Method    = "SymLink"                           # 部署方法（可选）
+            MappingId = "mapping:id"                        # 映射ID（可选）
+        }
+
 
         # Test 配置
         @{
-            Source  = "test\demo.txt"
-            Target  = "D:\Projects\dotfiles\test\demo1.txt"
-            Comment = "Test 1"
-            Method  = "Copy"
+            Source    = "test\demo.txt"
+            Target    = "D:\Projects\dotfiles\test\demo1.txt"
+            Comment   = "Test 1"
+            Method    = "Copy"
         }
 
         @{
-            Source  = "test\demo.txt"
-            Target  = "D:\Projects\dotfiles\test\demo2.txt"
-            Comment = "Test 2"
-            Method  = "Copy"
+            Source    = "test\demo.txt"
+            Target    = "D:\Projects\dotfiles\test\demo2.txt"
+            Comment   = "Test 2"
+            Method    = "Copy"
         }
 
         # MCP 配置文件

@@ -48,8 +48,18 @@ if (-not (Test-Administrator)) {
     Write-Host "    🔄 正在自动提权..." -ForegroundColor Cyan
     
     try {
+        # 加载配置以获取项目前缀
+        $configFile = Join-Path $dotfilesDir "config.psd1"
+        $projectPrefix = "dotfiles" # 默认值
+        if (Test-Path $configFile) {
+            $config = Import-PowerShellDataFile -Path $configFile
+            if ($config.ProjectSettings -and $config.ProjectSettings.ProjectPrefix) {
+                $projectPrefix = $config.ProjectSettings.ProjectPrefix
+            }
+        }
+
         # 创建临时日志文件
-        $logFile = Join-Path $env:TEMP "dotfiles_install_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
+        $logFile = Join-Path $env:TEMP "$($projectPrefix)_install_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
         
         # 启动提权进程
         $argumentList = @(
