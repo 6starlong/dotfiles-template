@@ -139,7 +139,8 @@ try {
     if ($outputDir -and -not (Test-Path $outputDir)) {
         New-Item -Path $outputDir -ItemType Directory -Force | Out-Null
     }
-    Set-Content -Path $TargetFile -Value ($finalJson + [System.Environment]::NewLine) -Encoding UTF8 -NoNewline
+        [System.IO.File]::WriteAllText($TargetFile, ($finalJson + [System.Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
+
 }
 catch {
     Write-Error "    转换失败: $($_.Exception.Message)"

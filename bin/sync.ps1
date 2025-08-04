@@ -8,8 +8,9 @@ param(
     [string]$Action = "sync"
 )
 
-# 处理帮助信息
-if ($Action -eq "help") {
+#region 辅助函数
+# 显示帮助信息
+function Show-HelpMessage {
     Write-Host ""
     Write-Host "📋 同步工具使用说明" -ForegroundColor Green
     Write-Host ""
@@ -26,30 +27,297 @@ if ($Action -eq "help") {
     Write-Host "  .\sync.ps1 force            # 强制同步" -ForegroundColor Gray
     Write-Host "  .\sync.ps1 silent           # 静默同步" -ForegroundColor Gray
     Write-Host ""
-    return
 }
 
-# 设置模式变量
-$Force = ($Action -eq "force")
-$Silent = ($Action -eq "silent")
-
-$dotfilesDir = Split-Path $PSScriptRoot -Parent
-
-# 加载配置文件
-$configFile = Join-Path $dotfilesDir "config.psd1"
-if (-not (Test-Path $configFile)) {
-    Write-Error "配置文件未找到: $configFile"
-    return
+# 加载配置数据
+function Get-ConfigData {
+    $configFile = Join-Path $script:DotfilesDir "config.psd1"
+    if (-not (Test-Path $configFile)) {
+        Write-Error "配置文件未找到: $configFile"
+        exit 1
+    }
+    return Import-PowerShellDataFile -Path $configFile
 }
-$config = Import-PowerShellDataFile -Path $configFile
 
-# 显示冲突概览选项
-function Show-ConflictOverviewOptions {
+# 展开路径变量
+function Expand-Path {
+    param([string]$Path)
+    return $Path -replace '\{USERPROFILE\}', $env:USERPROFILE
+}
+
+# 获取部署方法
+function Get-Method {
+    param([hashtable]$Link)
+    $method = if ($Link.Method) { $Link.Method } else { $script:Config.DefaultMethod }
+    if ($method) { return $method } else { return "SymLink" }
+}
+
+# 安全执行临时文件操作
+function Invoke-WithTempFiles {
     param(
-        [array]$ConflictItems
+        [scriptblock]$ScriptBlock,
+        [int]$Count = 1
     )
 
-    # 检查是否有多个配置指向同一个源文件
+    $tempFiles = @()
+    try {
+        for ($i = 0; $i -lt $Count; $i++) {
+            $tempFiles += [System.IO.Path]::GetTempFileName()
+        }
+        & $ScriptBlock @tempFiles
+    }
+    finally {
+        $tempFiles | ForEach-Object {
+            if (Test-Path $_) { Remove-Item $_ -Force -ErrorAction SilentlyContinue }
+        }
+    }
+}
+#endregion
+
+#region 初始化
+# 处理帮助信息
+if ($Action -eq "help") {
+    Show-HelpMessage
+    return
+}
+
+# 设置全局变量
+$script:Force = ($Action -eq "force")
+$script:Silent = ($Action -eq "silent")
+$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
+$script:Config = Get-ConfigData
+#endregion
+
+#region 文件比较和差异显示
+# 比较文件内容
+function Test-FileContentEqual {
+    param(
+        [Parameter(Mandatory)][string]$File1,
+        [Parameter(Mandatory)][string]$File2
+    )
+
+    try {
+        $content1 = Get-Content $File1 -Raw -ErrorAction Stop
+        $content2 = Get-Content $File2 -Raw -ErrorAction Stop
+        return $content1 -eq $content2
+    } catch {
+        return $false
+    }
+}
+
+# 获取 Git diff 输出
+function Get-GitDiffOutput {
+    param(
+        [Parameter(Mandatory)][string]$File1,
+        [Parameter(Mandatory)][string]$File2
+    )
+
+    $originalEncoding = [Console]::OutputEncoding
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+    try {
+        $rawOutput = & git diff --no-index --no-prefix -- $File1 $File2 2>$null
+        $coloredOutput = & git diff --no-index --color=always --no-prefix -- $File1 $File2 2>$null
+
+        return @{
+            ExitCode = $LASTEXITCODE
+            RawLines = if ($rawOutput) { $rawOutput -split "`n" } else { @() }
+            ColoredLines = if ($coloredOutput) { $coloredOutput -split "`n" } else { @() }
+        }
+    }
+    finally {
+        [Console]::OutputEncoding = $originalEncoding
+    }
+}
+
+# 过滤 Git diff 输出
+function Filter-GitDiffOutput {
+    param(
+        [Parameter(Mandatory)][string[]]$RawLines,
+        [Parameter(Mandatory)][string[]]$ColoredLines
+    )
+
+    $processedLines = @()
+    $filterPatterns = @('^diff --git\s', '^index\s+[a-f0-9]+\.\.[a-f0-9]+', '^---\s', '^\+\+\+\s')
+
+    for ($i = 0; $i -lt [Math]::Min($RawLines.Length, $ColoredLines.Length); $i++) {
+        $rawLine = $RawLines[$i]
+        $coloredLine = $ColoredLines[$i]
+
+        # 检查是否需要过滤
+        $shouldFilter = $filterPatterns | Where-Object { $rawLine -match $_ }
+        if ($shouldFilter) {
+            continue
+        }
+
+        # 清理并保留行
+        if ($coloredLine.Trim() -ne "") {
+            $processedLines += $coloredLine
+        }
+    }
+
+    return $processedLines
+}
+
+# 显示文件差异
+function Show-DiffView {
+    param(
+        [Parameter(Mandatory)][string]$File1,
+        [Parameter(Mandatory)][string]$File2,
+        [string]$Description1 = "文件1",
+        [string]$Description2 = "文件2"
+    )
+
+    try {
+        $diffResult = Get-GitDiffOutput -File1 $File1 -File2 $File2
+
+        switch ($diffResult.ExitCode) {
+            0 { Write-Host "    📄 文件内容相同" -ForegroundColor Gray }
+            1 {
+                if ($diffResult.RawLines -and $diffResult.ColoredLines) {
+                    $processedLines = Filter-GitDiffOutput -RawLines $diffResult.RawLines -ColoredLines $diffResult.ColoredLines
+                    $processedLines | ForEach-Object {
+                        if ($_.Trim() -ne "") { Write-Host "    $_" }
+                    }
+                } else {
+                    Write-Host "    📄 文件内容相同" -ForegroundColor Gray
+                }
+            }
+            default {
+                Write-Host "    ❌ git diff 执行失败（退出代码: $($diffResult.ExitCode)）" -ForegroundColor Red
+            }
+        }
+    } catch {
+        Write-Host "    ❌ 无法调用 git diff: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
+# 比较文件内容并显示差异
+function Compare-FileContent {
+    param(
+        [Parameter(Mandatory)][string]$File1,
+        [Parameter(Mandatory)][string]$File2,
+        [string]$Description1 = "文件1",
+        [string]$Description2 = "文件2"
+    )
+
+    if (Test-FileContentEqual $File1 $File2) {
+        return $true
+    }
+
+    Write-Host ""
+    Write-Host "    📋 文件差异 (git diff):" -ForegroundColor Cyan
+    Write-Host ""
+    Show-DiffView $File1 $File2 $Description1 $Description2
+    return $false
+}
+#endregion
+
+#region 同步处理函数
+# 检查文件冲突
+function Test-FileConflict {
+    param(
+        [Parameter(Mandatory)][hashtable]$Link,
+        [Parameter(Mandatory)][string]$TargetPath,
+        [Parameter(Mandatory)][string]$SourcePath,
+        [Parameter(Mandatory)][string]$Method
+    )
+
+    if (-not (Test-Path $SourcePath)) {
+        return $false
+    }
+
+    switch ($Method) {
+        "Copy" {
+            return -not (Test-FileContentEqual $TargetPath $SourcePath)
+        }
+        "Transform" {
+            if (-not $Link.Transform) {
+                Write-Host "    ❌ Transform配置缺少Transform参数: $($Link.Comment)" -ForegroundColor Red
+                return $false
+            }
+
+            $transformScript = Join-Path $PSScriptRoot "transform.ps1"
+            if (-not (Test-Path $transformScript)) {
+                Write-Host "    ❌ 转换脚本未找到: $transformScript" -ForegroundColor Red
+                return $false
+            }
+
+            try {
+                return Invoke-WithTempFiles -Count 1 -ScriptBlock {
+                    param($tempFile)
+                    & $transformScript -SourceFile $TargetPath -TargetFile $tempFile -TransformType $Link.Transform -Reverse -ErrorAction Stop | Out-Null
+                    return -not (Test-FileContentEqual $tempFile $SourcePath)
+                }
+            } catch {
+                Write-Host "    ❌ 转换失败: $($Link.Comment). 错误: $($_.Exception.Message)" -ForegroundColor Red
+                return $false
+            }
+        }
+        default {
+            return $false
+        }
+    }
+}
+
+# 同步单个文件
+function Sync-SingleFile {
+    param([Parameter(Mandatory)][hashtable]$ConflictItem)
+
+    try {
+        switch ($ConflictItem.Method) {
+            "Copy" {
+                Copy-Item $ConflictItem.TargetPath $ConflictItem.SourcePath -Force
+                Write-Host "    ✅ 同步: $($ConflictItem.Link.Comment)" -ForegroundColor Green
+                Write-Host "    $($ConflictItem.TargetPath) -> $($ConflictItem.SourcePath)" -ForegroundColor Gray
+            }
+            "Transform" {
+                Invoke-WithTempFiles -Count 1 -ScriptBlock {
+                    param($tempFile)
+                    & $ConflictItem.TransformScript -SourceFile $ConflictItem.TargetPath -TargetFile $tempFile -TransformType $ConflictItem.Link.Transform -Reverse -ErrorAction Stop | Out-Null
+                    Copy-Item $tempFile $ConflictItem.SourcePath -Force
+                    Write-Host "    ✅ 同步(转换): $($ConflictItem.Link.Comment)" -ForegroundColor Green
+                    Write-Host "    $($ConflictItem.TargetPath) -> $($ConflictItem.SourcePath) (反向转换)" -ForegroundColor Gray
+                }
+            }
+            default {
+                throw "不支持的同步方法: $($ConflictItem.Method)"
+            }
+        }
+        return $true
+    } catch {
+        Write-Host "    ❌ 同步失败: $($ConflictItem.Link.Comment). 错误: $($_.Exception.Message)" -ForegroundColor Red
+        return $false
+    }
+}
+
+# 创建冲突项
+function New-ConflictItem {
+    param(
+        [Parameter(Mandatory)][hashtable]$Link,
+        [Parameter(Mandatory)][string]$Method,
+        [Parameter(Mandatory)][string]$TargetPath,
+        [Parameter(Mandatory)][string]$SourcePath
+    )
+
+    $originalContent = if (Test-Path $SourcePath) { Get-Content $SourcePath -Raw } else { "" }
+
+    return @{
+        Link = $Link
+        Method = $Method
+        TargetPath = $TargetPath
+        SourcePath = $SourcePath
+        OriginalDotfilesContent = $originalContent
+        TransformScript = if ($Method -eq "Transform") { Join-Path $PSScriptRoot "transform.ps1" } else { $null }
+    }
+}
+#endregion
+
+#region 用户界面函数
+# 显示冲突概览选项
+function Show-ConflictOverviewOptions {
+    param([array]$ConflictItems)
+
     $sourceGroups = $ConflictItems | Group-Object { $_.SourcePath }
     $hasSourceConflicts = ($sourceGroups | Where-Object { $_.Count -gt 1 }).Count -gt 0
 
@@ -72,312 +340,153 @@ function Show-ConflictOverviewOptions {
 # 显示单个文件的差异选项
 function Show-DiffEditOptions {
     Write-Host ""
+    Write-Host "    - 旧内容 (Dotfiles)" -ForegroundColor Red
+    Write-Host "    + 新内容 (UserProfile)" -ForegroundColor Green
+    Write-Host ""
     Write-Host "    选择操作:" -ForegroundColor Yellow
     Write-Host "    [1] 使用 UserProfile (覆盖 Dotfiles)" -ForegroundColor White
     Write-Host "    [2] 跳过此文件 (保留 Dotfiles)" -ForegroundColor White
     Write-Host ""
 }
 
-# 静默比较文件内容
-function Test-FileContentEqual {
+# 显示冲突差异
+function Show-ConflictDiff {
+    param([hashtable]$ConflictItem)
+
+    Write-Host ""
+    Write-Host "    📄 处理冲突: $($ConflictItem.Link.Comment)" -ForegroundColor Yellow
+
+    switch ($ConflictItem.Method) {
+        "Copy" {
+            Invoke-WithTempFiles -Count 1 -ScriptBlock {
+                param($tempDotfilesFile)
+                [System.IO.File]::WriteAllText($tempDotfilesFile, $ConflictItem.OriginalDotfilesContent, [System.Text.UTF8Encoding]::new($false))
+                Compare-FileContent $tempDotfilesFile $ConflictItem.TargetPath "Dotfiles (仓库中的配置)" "UserProfile (你的当前配置)" | Out-Null
+            }
+        }
+        "Transform" {
+            Invoke-WithTempFiles -Count 2 -ScriptBlock {
+                param($tempUserFile, $tempDotfilesFile)
+                & $ConflictItem.TransformScript -SourceFile $ConflictItem.TargetPath -TargetFile $tempUserFile -TransformType $ConflictItem.Link.Transform -Reverse -ErrorAction Stop | Out-Null
+                [System.IO.File]::WriteAllText($tempDotfilesFile, $ConflictItem.OriginalDotfilesContent, [System.Text.UTF8Encoding]::new($false))
+                Compare-FileContent $tempDotfilesFile $tempUserFile "Dotfiles (仓库中的配置)" "UserProfile (转换后)" | Out-Null
+            }
+        }
+    }
+}
+#endregion
+
+#region 主同步逻辑
+# 处理单个配置链接
+function Process-ConfigLink {
     param(
-        [string]$File1,
-        [string]$File2
+        [hashtable]$Link,
+        [ref]$SyncedCount,
+        [ref]$SkippedCount,
+        [ref]$ConflictItems
     )
 
-    try {
-        $content1 = Get-Content $File1 -Raw -ErrorAction Stop
-        $content2 = Get-Content $File2 -Raw -ErrorAction Stop
-        return $content1 -eq $content2
-    } catch {
-        return $false
-    }
-}
+    $method = Get-Method -Link $Link
 
-# 比较文件内容并显示差异
-function Compare-FileContent {
-    param(
-        [string]$File1,
-        [string]$File2,
-        [string]$Description1 = "文件1",
-        [string]$Description2 = "文件2"
-    )
-
-    try {
-        $content1 = Get-Content $File1 -Raw -ErrorAction Stop
-        $content2 = Get-Content $File2 -Raw -ErrorAction Stop
-
-        if ($content1 -eq $content2) {
-            return $true
-        }
-
-        Write-Host ""
-        Write-Host "    📋 文件差异 (类似 git diff):" -ForegroundColor Cyan
-        Write-Host ""
-
-        # 分割为行数组
-        $lines1 = $content1 -split "`n"
-        $lines2 = $content2 -split "`n"
-
-        # 生成差异视图
-        Show-DiffView $lines1 $lines2 $Description1 $Description2
-
-        Write-Host ""
-        return $false
-    } catch {
-        Write-Host "    ❌ 无法比较文件: $($_.Exception.Message)" -ForegroundColor Red
-        return $false
-    }
-}
-
-# 显示类似 git diff 的差异视图
-function Show-DiffView {
-    param(
-        [string[]]$Lines1,
-        [string[]]$Lines2,
-        [string]$Description1,
-        [string]$Description2
-    )
-
-    $maxLines = [Math]::Max($Lines1.Count, $Lines2.Count)
-    $contextLines = 3  # 上下文行数
-    $diffBlocks = @()  # 存储差异块
-
-    # 找出所有差异行
-    for ($i = 0; $i -lt $maxLines; $i++) {
-        $line1 = if ($i -lt $Lines1.Count) { $Lines1[$i] } else { $null }
-        $line2 = if ($i -lt $Lines2.Count) { $Lines2[$i] } else { $null }
-
-        if ($line1 -ne $line2) {
-            # 计算上下文范围
-            $start = [Math]::Max(0, $i - $contextLines)
-            $end = [Math]::Min($maxLines - 1, $i + $contextLines)
-
-            # 检查是否与现有差异块重叠
-            $merged = $false
-            for ($j = 0; $j -lt $diffBlocks.Count; $j++) {
-                if ($start -le $diffBlocks[$j].End + 1 -and $end -ge $diffBlocks[$j].Start - 1) {
-                    # 合并差异块
-                    $diffBlocks[$j].Start = [Math]::Min($diffBlocks[$j].Start, $start)
-                    $diffBlocks[$j].End = [Math]::Max($diffBlocks[$j].End, $end)
-                    $merged = $true
-                    break
-                }
-            }
-
-            if (-not $merged) {
-                $diffBlocks += @{
-                    Start = $start
-                    End = $end
-                }
-            }
-        }
+    # 只处理 Copy 和 Transform 方法
+    if ($method -ne "Copy" -and $method -ne "Transform") {
+        Write-Host "    ➡️ 跳过SymLink: $($Link.Comment) (自动同步)" -ForegroundColor Cyan
+        $SkippedCount.Value++
+        return
     }
 
-    # 显示差异块
-    foreach ($block in $diffBlocks) {
-        Write-Host "    @@ -$($block.Start + 1),$($block.End - $block.Start + 1) +$($block.Start + 1),$($block.End - $block.Start + 1) @@" -ForegroundColor Cyan
+    $targetPath = Expand-Path -Path $Link.Target
+    $sourcePath = Join-Path $script:DotfilesDir $Link.Source
 
-        for ($i = $block.Start; $i -le $block.End; $i++) {
-            $line1 = if ($i -lt $Lines1.Count) { $Lines1[$i] } else { $null }
-            $line2 = if ($i -lt $Lines2.Count) { $Lines2[$i] } else { $null }
-
-            if ($line1 -eq $line2) {
-                # 相同行 (上下文)
-                Write-Host "    $($i + 1):  $line1" -ForegroundColor Gray
-            } else {
-                # 差异行
-                if ($line1 -ne $null) {
-                    Write-Host "    $($i + 1): -$line1" -ForegroundColor Red
-                }
-                if ($line2 -ne $null) {
-                    Write-Host "    $($i + 1): +$line2" -ForegroundColor Green
-                }
-            }
-        }
-        Write-Host ""
+    # 检查目标文件是否存在
+    if (-not (Test-Path $targetPath)) {
+        Write-Host "    ⚠️ 文件不存在: $($Link.Comment)" -ForegroundColor Yellow
+        $SkippedCount.Value++
+        return
     }
 
-    # 显示文件信息
-    Write-Host "    📄 $Description1 (红色 -)" -ForegroundColor Red
-    Write-Host "    📄 $Description2 (绿色 +)" -ForegroundColor Green
-}
-
-# 同步单个文件
-function Sync-SingleFile {
-    param($ConflictItem)
-
-    try {
-        if ($ConflictItem.Method -eq "Copy") {
-            # 直接复制文件
-            Copy-Item $ConflictItem.TargetPath $ConflictItem.SourcePath -Force
-            Write-Host "    ✅ 同步: $($ConflictItem.Link.Comment)" -ForegroundColor Green
-            Write-Host "    $($ConflictItem.TargetPath) -> $($ConflictItem.SourcePath)" -ForegroundColor Gray
-        } else {
-            # Transform方法，需要反向转换
-            $tempFile = [System.IO.Path]::GetTempFileName()
-            try {
-                & $ConflictItem.TransformScript -SourceFile $ConflictItem.TargetPath -TargetFile $tempFile -TransformType $ConflictItem.Link.Transform -Reverse -ErrorAction Stop | Out-Null
-                Copy-Item $tempFile $ConflictItem.SourcePath -Force
-                Write-Host "    ✅ 同步(转换): $($ConflictItem.Link.Comment)" -ForegroundColor Green
-                Write-Host "    $($ConflictItem.TargetPath) -> $($ConflictItem.SourcePath) (反向转换)" -ForegroundColor Gray
-            } finally {
-                if (Test-Path $tempFile) { Remove-Item $tempFile -Force }
-            }
-        }
-        return $true
-    } catch {
-        Write-Host "    ❌ 同步失败: $($ConflictItem.Link.Comment). 错误: $($_.Exception.Message)" -ForegroundColor Red
-        return $false
+    # 确保源文件目录存在
+    $sourceDir = Split-Path $sourcePath -Parent
+    if (-not (Test-Path $sourceDir)) {
+        New-Item -Path $sourceDir -ItemType Directory -Force | Out-Null
     }
-}
 
-Write-Host "    🔄 同步配置文件到仓库..." -ForegroundColor Yellow
-Write-Host ""
+    # 检查冲突
+    $hasConflict = Test-FileConflict -Link $Link -TargetPath $targetPath -SourcePath $sourcePath -Method $method
 
-$syncedCount = 0
-$skippedCount = 0
-$conflictCount = 0
-$globalChoice = $null
-$conflictItems = @()  # 存储所有冲突项
-
-# 第一阶段：收集所有冲突和无冲突项
-foreach ($link in $config.Links) {
-    # 获取部署方法
-    $method = if ($link.Method) { $link.Method } else { $config.DefaultMethod }
-    if (-not $method) { $method = "SymLink" }
-
-    # 处理Copy和Transform方法的配置
-    if ($method -eq "Copy" -or $method -eq "Transform") {
-        $targetPath = $link.Target -replace '\{USERPROFILE\}', $env:USERPROFILE
-        $sourcePath = Join-Path $dotfilesDir $link.Source
-
-        if (-not (Test-Path $targetPath)) {
-            Write-Host "    ⚠️ 文件不存在: $($link.Comment)" -ForegroundColor Yellow
-            $skippedCount++
-            continue
-        }
-
-        # 确保源文件目录存在
-        $sourceDir = Split-Path $sourcePath -Parent
-        if (-not (Test-Path $sourceDir)) {
-            New-Item -Path $sourceDir -ItemType Directory -Force | Out-Null
-        }
-
-        $hasConflict = $false
+    if ($hasConflict -and -not $script:Force) {
+        # 收集冲突项
+        $ConflictItems.Value += New-ConflictItem -Link $Link -Method $method -TargetPath $targetPath -SourcePath $sourcePath
+    } else {
+        # 处理无冲突或强制模式
         $shouldSync = $true
 
-        # 检查是否存在冲突
-        if (Test-Path $sourcePath) {
-            if ($method -eq "Copy") {
-                # 直接比较文件内容
-                $hasConflict = -not (Test-FileContentEqual $targetPath $sourcePath)
-            } elseif ($method -eq "Transform") {
-                # 对于Transform方法，需要反向转换后比较
-                if (-not $link.Transform) {
-                    Write-Host "    ❌ Transform配置缺少Transform参数: $($link.Comment)" -ForegroundColor Red
-                    $skippedCount++
-                    continue
-                }
-
-                $transformScript = Join-Path $PSScriptRoot "transform.ps1"
-                if (-not (Test-Path $transformScript)) {
-                    Write-Host "    ❌ 转换脚本未找到: $transformScript" -ForegroundColor Red
-                    $skippedCount++
-                    continue
-                }
-
-                # 创建临时文件进行反向转换
-                $tempFile = [System.IO.Path]::GetTempFileName()
-                try {
-                    # 将 UserProfile 反向转换为基础格式
-                    & $transformScript -SourceFile $targetPath -TargetFile $tempFile -TransformType $link.Transform -Reverse -ErrorAction Stop | Out-Null
-                    $hasConflict = -not (Test-FileContentEqual $tempFile $sourcePath)
-                } catch {
-                    Write-Host "    ❌ 转换失败: $($link.Comment). 错误: $($_.Exception.Message)" -ForegroundColor Red
-                    $skippedCount++
-                    continue
-                } finally {
-                    if (Test-Path $tempFile) {
-                        Remove-Item $tempFile -Force
-                    }
-                }
-            }
-        }
-
-        # 收集冲突项或直接处理无冲突项
-        if ($hasConflict -and -not $Force) {
-            # 收集冲突项，稍后统一处理
-            # 保存原始的 Dotfiles 内容，避免后续处理时被覆盖
-            $originalDotfilesContent = Get-Content $sourcePath -Raw
-
-            $conflictItems += @{
-                Link = $link
-                Method = $method
-                TargetPath = $targetPath
-                SourcePath = $sourcePath
-                OriginalDotfilesContent = $originalDotfilesContent
-                TransformScript = if ($method -eq "Transform") { $transformScript } else { $null }
-            }
-            $conflictCount++
-            $shouldSync = $false  # 冲突文件不在第一阶段同步
-        } else {
-            # 无冲突或强制模式，直接同步
-            if ($Silent -and $hasConflict) {
-                # 静默模式，默认跳过冲突
-                Write-Host "    ➡️ 静默模式，跳过冲突: $($link.Comment)" -ForegroundColor Cyan
-                $shouldSync = $false
-            } else {
-                $shouldSync = $true  # 无冲突，直接同步
-            }
+        if ($script:Silent -and $hasConflict) {
+            Write-Host "    ➡️ 静默模式，跳过冲突: $($Link.Comment)" -ForegroundColor Cyan
+            $shouldSync = $false
         }
 
         if ($shouldSync) {
-            try {
-                if ($method -eq "Copy") {
-                    # 直接复制文件
-                    Copy-Item $targetPath $sourcePath -Force
-                    Write-Host "    ✅ 同步: $($link.Comment)" -ForegroundColor Green
-                    Write-Host "    $targetPath -> $sourcePath" -ForegroundColor Gray
-                } elseif ($method -eq "Transform") {
-                    # 反向转换后保存
-                    & $transformScript -SourceFile $targetPath -TargetFile $sourcePath -TransformType $link.Transform -Reverse -ErrorAction Stop | Out-Null
-                    Write-Host "    ✅ 同步(转换): $($link.Comment)" -ForegroundColor Green
-                    Write-Host "    $targetPath -> $sourcePath (反向转换)" -ForegroundColor Gray
-                }
-                $syncedCount++
-            } catch {
-                Write-Host "    ❌ 同步失败: $($link.Comment). 错误: $($_.Exception.Message)" -ForegroundColor Red
-                $skippedCount++
+            $conflictItem = New-ConflictItem -Link $Link -Method $method -TargetPath $targetPath -SourcePath $sourcePath
+            if (Sync-SingleFile -ConflictItem $conflictItem) {
+                $SyncedCount.Value++
+            } else {
+                $SkippedCount.Value++
             }
-        } elseif (-not ($hasConflict -and -not $Force)) {
-            # 只有非冲突的跳过才显示消息，冲突文件会在后面统一处理
-            Write-Host "    ➡️ 跳过: $($link.Comment)" -ForegroundColor Cyan
-            $skippedCount++
+        } else {
+            $SkippedCount.Value++
         }
-    } else {
-        Write-Host "    ➡️ 跳过SymLink: $($link.Comment) (自动同步)" -ForegroundColor Cyan
-        $skippedCount++
     }
 }
 
-# 第二阶段：处理所有冲突
-if ($conflictItems.Count -gt 0 -and -not $Silent) {
+# 启动同步过程
+function Start-SyncProcess {
+    Write-Host "    🔄 同步配置文件到仓库..." -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "    ⚠️ 检测到 $($conflictItems.Count) 个冲突:" -ForegroundColor Yellow
+
+    $syncedCount = 0
+    $skippedCount = 0
+    $conflictItems = @()
+
+    # 第一阶段：收集所有冲突和无冲突项
+    foreach ($link in $script:Config.Links) {
+        Process-ConfigLink -Link $link -SyncedCount ([ref]$syncedCount) -SkippedCount ([ref]$skippedCount) -ConflictItems ([ref]$conflictItems)
+    }
+    # 第二阶段：处理所有冲突
+    Process-ConflictResolution -ConflictItems $conflictItems -SyncedCount ([ref]$syncedCount) -SkippedCount ([ref]$skippedCount)
+
+    # 显示最终统计
+    Show-SyncSummary -SyncedCount $syncedCount -SkippedCount $skippedCount -ConflictCount $conflictItems.Count
+}
+
+# 处理冲突解决
+function Process-ConflictResolution {
+    param(
+        [array]$ConflictItems,
+        [ref]$SyncedCount,
+        [ref]$SkippedCount
+    )
+
+    if ($ConflictItems.Count -eq 0 -or $script:Silent) {
+        return
+    }
+
+    Write-Host ""
+    Write-Host "    ⚠️ 检测到 $($ConflictItems.Count) 个冲突:" -ForegroundColor Yellow
 
     # 显示所有冲突项
-    for ($i = 0; $i -lt $conflictItems.Count; $i++) {
-        Write-Host "    $($i + 1). $($conflictItems[$i].Link.Comment)" -ForegroundColor White
+    for ($i = 0; $i -lt $ConflictItems.Count; $i++) {
+        Write-Host "    $($i + 1). $($ConflictItems[$i].Link.Comment)" -ForegroundColor White
     }
 
     # 显示冲突概览选项
-    Show-ConflictOverviewOptions -ConflictItems $conflictItems
+    Show-ConflictOverviewOptions -ConflictItems $ConflictItems
 
     # 检查是否有源文件冲突来决定可用选项
-    $sourceGroups = $conflictItems | Group-Object { $_.SourcePath }
+    $sourceGroups = $ConflictItems | Group-Object { $_.SourcePath }
     $hasSourceConflicts = ($sourceGroups | Where-Object { $_.Count -gt 1 }).Count -gt 0
 
+    # 获取用户选择
     if ($hasSourceConflicts) {
         Write-Host -NoNewline "    选择 (d/s): "
     } else {
@@ -387,103 +496,111 @@ if ($conflictItems.Count -gt 0 -and -not $Silent) {
 
     switch ($overviewChoice.ToLower()) {
         "d" {
-            # 逐个查看差异并选择
-            Write-Host ""
-            Write-Host "    🔍 进入差异编辑模式..." -ForegroundColor Cyan
-
-            foreach ($conflictItem in $conflictItems) {
-                Write-Host ""
-                Write-Host "    📄 处理冲突: $($conflictItem.Link.Comment)" -ForegroundColor Yellow
-
-                # 显示差异（使用保存的原始内容）
-                if ($conflictItem.Method -eq "Copy") {
-                    # 创建临时文件保存原始 Dotfiles 内容
-                    $tempDotfilesFile = [System.IO.Path]::GetTempFileName()
-                    try {
-                        Set-Content $tempDotfilesFile $conflictItem.OriginalDotfilesContent -NoNewline
-                        Compare-FileContent $conflictItem.TargetPath $tempDotfilesFile "UserProfile" "Dotfiles" | Out-Null
-                    } finally {
-                        if (Test-Path $tempDotfilesFile) { Remove-Item $tempDotfilesFile -Force }
-                    }
-                } else {
-                    $tempUserFile = [System.IO.Path]::GetTempFileName()
-                    $tempDotfilesFile = [System.IO.Path]::GetTempFileName()
-                    try {
-                        # 转换 UserProfile 内容
-                        & $conflictItem.TransformScript -SourceFile $conflictItem.TargetPath -TargetFile $tempUserFile -TransformType $conflictItem.Link.Transform -Reverse -ErrorAction Stop | Out-Null
-                        # 保存原始 Dotfiles 内容
-                        Set-Content $tempDotfilesFile $conflictItem.OriginalDotfilesContent -NoNewline
-                        Compare-FileContent $tempUserFile $tempDotfilesFile "UserProfile(转换后)" "Dotfiles" | Out-Null
-                    } finally {
-                        if (Test-Path $tempUserFile) { Remove-Item $tempUserFile -Force }
-                        if (Test-Path $tempDotfilesFile) { Remove-Item $tempDotfilesFile -Force }
-                    }
-                }
-
-                # 显示单个文件选项
-                Show-DiffEditOptions
-                Write-Host -NoNewline "    选择 (1/2): "
-                $fileChoice = Read-Host
-
-                switch ($fileChoice) {
-                    "1" {
-                        # 同步此文件
-                        if (Sync-SingleFile $conflictItem) {
-                            $syncedCount++
-                        } else {
-                            $skippedCount++
-                        }
-                    }
-                    default {
-                        # 跳过此文件
-                        Write-Host "    ➡️ 跳过: $($conflictItem.Link.Comment)" -ForegroundColor Cyan
-                        $skippedCount++
-                    }
-                }
-            }
+            Process-IndividualConflicts -ConflictItems $ConflictItems -SyncedCount $SyncedCount -SkippedCount $SkippedCount
         }
         "a" {
-            # 对所有冲突使用 UserProfile（仅在无源文件冲突时可用）
-            if ($hasSourceConflicts) {
-                Write-Host ""
-                Write-Host "    ❌ 无效选择: 存在多个配置指向相同源文件，无法批量同步" -ForegroundColor Red
-                Write-Host "    💡 请使用 [d] 选项逐个处理冲突" -ForegroundColor Cyan
-                Write-Host ""
-                Write-Host "    ➡️ 自动跳过所有冲突文件" -ForegroundColor Cyan
-                $skippedCount += $conflictItems.Count
-            } else {
-                Write-Host ""
-                Write-Host "    🔄 同步所有冲突文件..." -ForegroundColor Green
-                foreach ($conflictItem in $conflictItems) {
-                    if (Sync-SingleFile $conflictItem) {
-                        $syncedCount++
-                    } else {
-                        $skippedCount++
-                    }
-                }
+            if (-not $hasSourceConflicts) {
+                Process-BatchConflictResolution -ConflictItems $ConflictItems -Action "SyncAll" -SyncedCount $SyncedCount -SkippedCount $SkippedCount
             }
         }
+        "s" {
+            Process-BatchConflictResolution -ConflictItems $ConflictItems -Action "SkipAll" -SyncedCount $SyncedCount -SkippedCount $SkippedCount
+        }
         default {
-            # 跳过所有冲突
-            Write-Host ""
-            Write-Host "    ➡️ 跳过所有冲突文件" -ForegroundColor Cyan
-            $skippedCount += $conflictItems.Count
+            Write-Host "    ❌ 无效选择，跳过所有冲突" -ForegroundColor Red
+            Process-BatchConflictResolution -ConflictItems $ConflictItems -Action "SkipAll" -SyncedCount $SyncedCount -SkippedCount $SkippedCount
         }
     }
 }
 
-Write-Host ""
-Write-Host "    🎉 同步完成!" -ForegroundColor Green
-Write-Host "    📊 同步了 $syncedCount 个配置文件，跳过 $skippedCount 个" -ForegroundColor Green
+# 处理逐个冲突解决
+function Process-IndividualConflicts {
+    param(
+        [array]$ConflictItems,
+        [ref]$SyncedCount,
+        [ref]$SkippedCount
+    )
 
-if ($conflictCount -gt 0) {
-    Write-Host "    ⚠️ 处理了 $conflictCount 个冲突" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "    🔍 进入差异编辑模式..." -ForegroundColor Cyan
+
+    foreach ($conflictItem in $ConflictItems) {
+        Show-ConflictDiff -ConflictItem $conflictItem
+        Show-DiffEditOptions
+
+        Write-Host -NoNewline "    选择 (1/2): "
+        $choice = Read-Host
+
+        switch ($choice) {
+            "1" {
+                if (Sync-SingleFile -ConflictItem $conflictItem) {
+                    $SyncedCount.Value++
+                } else {
+                    $SkippedCount.Value++
+                }
+            }
+            "2" {
+                Write-Host "    ➡️ 跳过: $($conflictItem.Link.Comment)" -ForegroundColor Cyan
+                $SkippedCount.Value++
+            }
+            default {
+                Write-Host "    ❌ 无效选择，跳过此文件" -ForegroundColor Red
+                $SkippedCount.Value++
+            }
+        }
+    }
 }
 
-if ($syncedCount -gt 0) {
+# 处理批量冲突解决
+function Process-BatchConflictResolution {
+    param(
+        [array]$ConflictItems,
+        [ValidateSet("SyncAll", "SkipAll")][string]$Action,
+        [ref]$SyncedCount,
+        [ref]$SkippedCount
+    )
+
+    switch ($Action) {
+        "SyncAll" {
+            Write-Host ""
+            Write-Host "    🔄 同步所有冲突文件..." -ForegroundColor Cyan
+            foreach ($conflictItem in $ConflictItems) {
+                if (Sync-SingleFile -ConflictItem $conflictItem) {
+                    $SyncedCount.Value++
+                } else {
+                    $SkippedCount.Value++
+                }
+            }
+        }
+        "SkipAll" {
+            Write-Host ""
+            Write-Host "    ➡️ 跳过所有冲突文件..." -ForegroundColor Cyan
+            foreach ($conflictItem in $ConflictItems) {
+                Write-Host "    ➡️ 跳过: $($conflictItem.Link.Comment)" -ForegroundColor Cyan
+                $SkippedCount.Value++
+            }
+        }
+    }
+}
+
+# 显示同步摘要
+function Show-SyncSummary {
+    param(
+        [int]$SyncedCount,
+        [int]$SkippedCount,
+        [int]$ConflictCount
+    )
+
     Write-Host ""
-    Write-Host "    💡 提示: 记得提交更改到Git仓库" -ForegroundColor Yellow
-    Write-Host "       git add ." -ForegroundColor Gray
-    Write-Host "       git commit -m `"Update configurations`"" -ForegroundColor Gray
+    Write-Host "    📊 同步完成!" -ForegroundColor Green
+    Write-Host "    ✅ 已同步: $SyncedCount 个文件" -ForegroundColor Green
+    Write-Host "    ➡️ 已跳过: $SkippedCount 个文件" -ForegroundColor Cyan
+    if ($ConflictCount -gt 0) {
+        Write-Host "    ⚠️ 冲突数: $ConflictCount 个文件" -ForegroundColor Yellow
+    }
     Write-Host ""
 }
+#endregion
+
+# 启动同步过程
+Start-SyncProcess
