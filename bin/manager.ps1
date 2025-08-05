@@ -118,15 +118,7 @@ do {
         "5" { Show-Status }
         "0" {
             Clear-Host
-            Write-Host ""
-            Write-Host ""
-            Write-Host "    ================================================================" -ForegroundColor Green
-            Write-Host "                     感谢使用！Dotfiles 管理器" -ForegroundColor Cyan
-            Write-Host "    ================================================================" -ForegroundColor Green
-            Write-Host ""
-            Write-Host "    程序将在 3 秒后自动关闭..." -ForegroundColor Yellow
-            Start-Sleep -Seconds 3
-            break
+            exit
         }
         default {
             Write-Host "    [错误] 无效选择，请重试！" -ForegroundColor Red

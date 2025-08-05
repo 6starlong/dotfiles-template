@@ -13,3 +13,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# VS Code
+.vscode
+!.vscode/tasks.json

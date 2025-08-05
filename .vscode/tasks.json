@@ -4,70 +4,16 @@
     {
       "label": "Setup",
       "type": "shell",
-      "command": "Start-Process -FilePath .\\setup.cmd",
-      "options": {
-        "shell": {
-          "executable": "powershell.exe",
-        }
-      },
+      "command": ".\\setup.cmd",
       "group": {
         "kind": "build",
         "isDefault": true
       },
       "presentation": {
-        "reveal": "silent"
-      },
-      "problemMatcher": []
-    },
-    {
-      "label": "Install (Admin)",
-      "type": "shell",
-      "command": "Start-Process powershell.exe -Verb RunAs -ArgumentList '-NoExit -Command \"Set-Location -Path ''${workspaceFolder}''; .\\bin\\install.ps1\"'",
-      "presentation": {
-        "reveal": "silent",
-        "close": true
-      },
-      "problemMatcher": []
-    },
-    {
-      "label": "Uninstall",
-      "type": "shell",
-      "command": "powershell -ExecutionPolicy Bypass -File .\\bin\\uninstall.ps1",
-      "presentation": {
         "reveal": "always",
         "focus": true
       },
       "problemMatcher": []
-    },
-    {
-      "label": "Backup",
-      "type": "shell",
-      "command": "powershell -ExecutionPolicy Bypass -File .\\bin\\backup.ps1",
-      "presentation": {
-        "reveal": "always",
-        "focus": true
-      },
-      "problemMatcher": []
-    },
-    {
-      "label": "Sync",
-      "type": "shell",
-      "command": "powershell -ExecutionPolicy Bypass -File .\\bin\\sync.ps1",
-      "presentation": {
-        "reveal": "always",
-        "focus": true
-      },
-      "problemMatcher": []
-    },
-    {
-      "label": "Status",
-      "type": "shell",
-      "command": "powershell -ExecutionPolicy Bypass -File .\\bin\\status.ps1",
-      "presentation": {
-        "reveal": "always",
-        "focus": true
-      },
-      "problemMatcher": []
-    },
+    }
   ]
 }
