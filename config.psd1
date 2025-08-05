@@ -40,13 +40,13 @@
     # 配置链接
     Links = @(
         # 示例格式：
-        @{
-            Source    = "path\to\source.ext"                # 源文件路径
-            Target    = "{USERPROFILE}\path\to\target.ext"  # 目标路径
-            Comment   = "Config description"                # 配置描述
-            Method    = "SymLink"                           # 部署方法（可选）
-            MappingId = "mapping:id"                        # 映射ID（可选）
-        }
+        # @{
+        #     Source    = "path\to\source.ext"                # 源文件路径
+        #     Target    = "{USERPROFILE}\path\to\target.ext"  # 目标路径
+        #     Comment   = "Config description"                # 配置描述
+        #     Method    = "SymLink"                           # 部署方法（可选）
+        #     MappingId = "mapping:id"                        # 映射ID（可选）
+        # }
 
 
         # Test 配置

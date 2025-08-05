@@ -2,7 +2,10 @@
 # 根据 config.psd1 配置文件安装 dotfiles
 # 需要管理员权限来创建符号链接
 
-param([string]$LogFile)
+param(
+    [string]$LogFile,
+    [switch]$Overwrite
+)
 
 $dotfilesDir = Split-Path $PSScriptRoot -Parent
 $ErrorActionPreference = 'Stop'
@@ -67,6 +70,9 @@ if (-not (Test-Administrator)) {
             "-File", "`"$($MyInvocation.MyCommand.Path)`""
             "-LogFile", "`"$logFile`""
         )
+        if ($Overwrite) {
+            $argumentList += "-Overwrite"
+        }
         $process = Start-Process "PowerShell" -ArgumentList $argumentList -Verb RunAs -WindowStyle Hidden -PassThru
         $process.WaitForExit()
         
@@ -186,9 +192,24 @@ foreach ($link in $config.Links) {
                     $failureCount++
                     continue
                 }
-                
-                & $transformScript -SourceFile $sourcePath -TargetFile $targetPath -TransformType $link.MappingId -ErrorAction Stop
-                Write-InstallResult "✅ 已转换 $($link.Comment)" "Green"
+
+                if ($Overwrite) {
+                    # 强制覆盖模式：先转换到临时文件，再覆盖目标
+                    $tempFile = [System.IO.Path]::GetTempFileName()
+                    try {
+                        & $transformScript -SourceFile $sourcePath -TargetFile $tempFile -TransformType $link.MappingId -ErrorAction Stop | Out-Null
+                        Copy-Item $tempFile $targetPath -Force
+                        Write-InstallResult "✅ 已覆盖 $($link.Comment)" "Green"
+                    } finally {
+                        if (Test-Path $tempFile) {
+                            Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+                        }
+                    }
+                } else {
+                    # 目标文件不存在，直接转换
+                    & $transformScript -SourceFile $sourcePath -TargetFile $targetPath -TransformType $link.MappingId -ErrorAction Stop | Out-Null
+                    Write-InstallResult "✅ 已转换 $($link.Comment)" "Green"
+                }
             }
             default {
                 New-Item -ItemType SymbolicLink -Path $targetPath -Target $sourcePath -Force -ErrorAction Stop | Out-Null

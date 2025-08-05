@@ -107,6 +107,83 @@ function Test-FileContentEqual {
 #endregion
 
 #region 同步处理函数
+# 源文件状态管理器
+$script:SourceFileTracker = @{}
+
+# 初始化源文件跟踪
+function Initialize-SourceFileTracker {
+    param([array]$ConflictItems)
+    
+    $script:SourceFileTracker.Clear()
+    
+    # 按源文件分组
+    $sourceGroups = $ConflictItems | Group-Object -Property SourcePath
+    
+    foreach ($group in $sourceGroups) {
+        $sourcePath = $group.Name
+        if ([string]::IsNullOrEmpty($sourcePath)) {
+            continue
+        }
+        $originalContent = if (Test-Path $sourcePath) {
+            # 使用 .NET 方法正确读取 UTF-8 with BOM 文件
+            [System.IO.File]::ReadAllText($sourcePath, [System.Text.UTF8Encoding]::new($true))
+        } else { 
+            "" 
+        }
+        
+        $script:SourceFileTracker[$sourcePath] = @{
+            OriginalContent = $originalContent
+            CurrentContent = $originalContent
+            ProcessedItems = @()
+            TempFile = $null
+        }
+    }
+}
+
+# 获取源文件当前内容
+function Get-SourceFileCurrentContent {
+    param([string]$SourcePath)
+    
+    if ([string]::IsNullOrEmpty($SourcePath)) {
+        return ""
+    }
+    
+    if ($script:SourceFileTracker.ContainsKey($SourcePath)) {
+        return $script:SourceFileTracker[$SourcePath].CurrentContent
+    }
+    
+    # 如果没有跟踪，返回文件原始内容
+    if (Test-Path $SourcePath) { 
+        # 使用 .NET 方法正确读取 UTF-8 with BOM 文件
+        return [System.IO.File]::ReadAllText($SourcePath, [System.Text.UTF8Encoding]::new($true))
+    } else { 
+        return "" 
+    }
+}
+
+# 更新源文件当前内容
+function Update-SourceFileCurrentContent {
+    param(
+        [string]$SourcePath,
+        [string]$NewContent
+    )
+    
+    if ($script:SourceFileTracker.ContainsKey($SourcePath)) {
+        $script:SourceFileTracker[$SourcePath].CurrentContent = $NewContent
+        $script:SourceFileTracker[$SourcePath].ProcessedItems += @{ Timestamp = Get-Date }
+    }
+}
+
+# 清理源文件跟踪器
+function Clear-SourceFileTracker {
+    foreach ($tracker in $script:SourceFileTracker.Values) {
+        if ($tracker.TempFile -and (Test-Path $tracker.TempFile)) {
+            Remove-Item $tracker.TempFile -Force -ErrorAction SilentlyContinue
+        }
+    }
+    $script:SourceFileTracker.Clear()
+}
+
 # 检查文件冲突
 function Test-FileConflict {
     param(
@@ -161,15 +238,24 @@ function Sync-SingleFile {
         switch ($ConflictItem.Method) {
             "Copy" {
                 Copy-Item $ConflictItem.TargetPath $ConflictItem.SourcePath -Force
+                
+                # 更新源文件跟踪器
+                $newContent = Get-Content $ConflictItem.SourcePath -Raw
+                Update-SourceFileCurrentContent -SourcePath $ConflictItem.SourcePath -NewContent $newContent
+                
                 Write-Host "    ✅ 同步: $($ConflictItem.Link.Comment)" -ForegroundColor Green
                 Write-Host "    $($ConflictItem.TargetPath) -> $($ConflictItem.SourcePath)" -ForegroundColor Gray
-                Write-Host ""
             }
             "Transform" {
                 Invoke-WithTempFiles -Count 1 -ScriptBlock {
                     param($tempFile)
                     & $ConflictItem.TransformScript -SourceFile $ConflictItem.TargetPath -TargetFile $tempFile -TransformType $ConflictItem.Link.MappingId -Reverse -ErrorAction Stop | Out-Null
                     Copy-Item $tempFile $ConflictItem.SourcePath -Force
+                    
+                    # 更新源文件跟踪器
+                    $newContent = Get-Content $ConflictItem.SourcePath -Raw
+                    Update-SourceFileCurrentContent -SourcePath $ConflictItem.SourcePath -NewContent $newContent
+                    
                     Write-Host "    ✅ 同步(转换): $($ConflictItem.Link.Comment)" -ForegroundColor Green
                     Write-Host "    $($ConflictItem.TargetPath) -> $($ConflictItem.SourcePath) (反向转换)" -ForegroundColor Gray
                 }
@@ -194,14 +280,15 @@ function New-ConflictItem {
         [Parameter(Mandatory)][string]$SourcePath
     )
 
-    $originalContent = if (Test-Path $SourcePath) { Get-Content $SourcePath -Raw } else { "" }
+    # 使用源文件跟踪器获取当前内容，而不是原始文件内容
+    $currentSourceContent = Get-SourceFileCurrentContent -SourcePath $SourcePath
 
     return @{
         Link = $Link
         Method = $Method
         TargetPath = $TargetPath
         SourcePath = $SourcePath
-        OriginalDotfilesContent = $originalContent
+        OriginalDotfilesContent = $currentSourceContent  # 使用当前累积的内容
         TransformScript = if ($Method -eq "Transform") { Join-Path $PSScriptRoot "transform.ps1" } else { $null }
     }
 }
@@ -253,9 +340,14 @@ function Invoke-VSCodeDiff {
     $tempDotfilesFile = Join-Path $tempDir "$projectPrefix`_$sourceRelativePath`_target$sourceExtension"
 
     try {
-        # 准备文件内容用于比较
-        Copy-Item $ConflictItem.TargetPath $tempUserFile -Force
-        [System.IO.File]::WriteAllText($tempDotfilesFile, $ConflictItem.OriginalDotfilesContent, [System.Text.UTF8Encoding]::new($false))
+        
+        # 准备文件内容用于比较，确保编码一致性
+        # 读取目标文件内容并以 UTF-8 with BOM 写入临时文件
+        $targetContent = Get-Content $ConflictItem.TargetPath -Raw
+        [System.IO.File]::WriteAllText($tempUserFile, $targetContent, [System.Text.UTF8Encoding]::new($true))
+        
+        # # 使用 UTF-8 with BOM 确保中文在 VS Code 中正常显示
+        [System.IO.File]::WriteAllText($tempDotfilesFile, $ConflictItem.OriginalDotfilesContent, [System.Text.UTF8Encoding]::new($true))
 
         # 检查 VS Code 是否可用
         $codeExists = Get-Command "code" -ErrorAction SilentlyContinue
@@ -267,12 +359,18 @@ function Invoke-VSCodeDiff {
 
         # 打开 VS Code 差异视图
         Write-Host "    正在打开 VS Code... (请等待)" -ForegroundColor Gray
+        Write-Host ""
         & code --diff $tempUserFile $tempDotfilesFile --wait
 
         # 用户完成后，检查右侧文件是否有修改
         if (-not (Test-FileContentEqual $tempDotfilesFile $ConflictItem.OriginalDotfilesContent)) {
             # 应用合并结果
             Copy-Item $tempDotfilesFile $ConflictItem.SourcePath -Force
+            
+            # 更新源文件跟踪器
+            $newContent = Get-Content $ConflictItem.SourcePath -Raw
+            Update-SourceFileCurrentContent -SourcePath $ConflictItem.SourcePath -NewContent $newContent
+            
             Write-Host "    ✅ 合并完成: $($ConflictItem.Link.Comment)" -ForegroundColor Green
             Write-Host "    合并结果 -> $($ConflictItem.SourcePath)" -ForegroundColor Gray
             return $true
@@ -400,6 +498,22 @@ function Start-SyncProcess {
     # 第二阶段：处理所有冲突
     Process-ConflictResolution -ConflictItems $conflictItems -SyncedCount ([ref]$syncedCount) -SkippedCount ([ref]$skippedCount)
 
+    # 如果有文件被同步，自动运行安装脚本
+    if ($syncedCount -gt 0) {
+        Write-Host ""
+        Write-Host "    ----------------------------------------------------------------" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "    🔄 自动同步更新的配置..." -ForegroundColor Cyan
+        Write-Host ""
+        
+        $installScript = Join-Path $PSScriptRoot "install.ps1"
+        if (Test-Path $installScript) {
+            & $installScript -Overwrite
+        }
+
+        Write-Host "    ----------------------------------------------------------------" -ForegroundColor Gray
+    }
+
     # 显示最终统计
     Show-SyncSummary -SyncedCount $syncedCount -SkippedCount $skippedCount -ConflictCount $conflictItems.Count
 }
@@ -416,18 +530,47 @@ function Process-ConflictResolution {
         return
     }
 
-    Write-Host "    ⚠️ 检测到 $($ConflictItems.Count) 个冲突:" -ForegroundColor Yellow
+    # 初始化源文件跟踪器
+    Initialize-SourceFileTracker -ConflictItems $ConflictItems
+    
+    try {
+        Write-Host ""
+        Write-Host "    ⚠️ 检测到 $($ConflictItems.Count) 个冲突:" -ForegroundColor Yellow
 
-    # 显示所有冲突项
-    for ($i = 0; $i -lt $ConflictItems.Count; $i++) {
-        Write-Host "    $($i + 1). $($ConflictItems[$i].Link.Comment)" -ForegroundColor White
+        # 显示所有冲突项
+        for ($i = 0; $i -lt $ConflictItems.Count; $i++) {
+            Write-Host "    $($i + 1). $($ConflictItems[$i].Link.Comment)" -ForegroundColor White
+        }
+
+        Write-Host ""
+        Write-Host "    ----------------------------------------------------------------" -ForegroundColor Gray
+
+        # 按源文件分组处理
+        Process-ConflictsBySourceGroup -ConflictItems $ConflictItems -SyncedCount $SyncedCount -SkippedCount $SkippedCount
     }
+    finally {
+        # 清理源文件跟踪器
+        Clear-SourceFileTracker
+    }
+}
 
-    Write-Host ""
-    Write-Host "    ----------------------------------------------------------------" -ForegroundColor Gray
-
-    # 直接进入逐个文件处理模式
-    Process-IndividualConflicts -ConflictItems $ConflictItems -SyncedCount $SyncedCount -SkippedCount $SkippedCount
+# 按源文件分组处理冲突
+function Process-ConflictsBySourceGroup {
+    param(
+        [array]$ConflictItems,
+        [ref]$SyncedCount,
+        [ref]$SkippedCount
+    )
+    
+    # 按源文件分组
+    $sourceGroups = $ConflictItems | Group-Object -Property SourcePath
+    
+    foreach ($group in $sourceGroups) {
+        $groupItems = $group.Group
+        
+        # 逐个处理组内项目，每次都基于更新后的源文件内容
+        Process-IndividualConflicts -ConflictItems $groupItems -SyncedCount $SyncedCount -SkippedCount $SkippedCount
+    }
 }
 
 # 检查是否存在多个目标指向同一源文件的情况
@@ -458,7 +601,9 @@ function Process-IndividualConflicts {
         # 如果设置了批量操作，直接执行
         if ($batchAction) {
             if ($batchAction -eq "SyncAll") {
-                if (Sync-SingleFile -ConflictItem $conflictItem) {
+                # 重新创建冲突项以获取最新的源文件内容
+                $updatedConflictItem = New-ConflictItem -Link $conflictItem.Link -Method $conflictItem.Method -TargetPath $conflictItem.TargetPath -SourcePath $conflictItem.SourcePath
+                if (Sync-SingleFile -ConflictItem $updatedConflictItem) {
                     Write-Host "    ✅ 批量覆盖: $($conflictItem.Link.Comment)" -ForegroundColor Green
                     $SyncedCount.Value++
                 } else {
@@ -483,7 +628,9 @@ function Process-IndividualConflicts {
         switch ($choice.ToUpper()) {
             "" {
                 # 默认选择：VS Code 合并
-                if (Invoke-VSCodeDiff -ConflictItem $conflictItem) {
+                # 重新创建冲突项以获取最新的源文件内容
+                $updatedConflictItem = New-ConflictItem -Link $conflictItem.Link -Method $conflictItem.Method -TargetPath $conflictItem.TargetPath -SourcePath $conflictItem.SourcePath
+                if (Invoke-VSCodeDiff -ConflictItem $updatedConflictItem) {
                     $SyncedCount.Value++
                 } else {
                     $SkippedCount.Value++
@@ -491,7 +638,9 @@ function Process-IndividualConflicts {
             }
             "1" {
                 # 使用当前配置覆盖
-                if (Sync-SingleFile -ConflictItem $conflictItem) {
+                # 重新创建冲突项以获取最新的源文件内容
+                $updatedConflictItem = New-ConflictItem -Link $conflictItem.Link -Method $conflictItem.Method -TargetPath $conflictItem.TargetPath -SourcePath $conflictItem.SourcePath
+                if (Sync-SingleFile -ConflictItem $updatedConflictItem) {
                     $SyncedCount.Value++
                 } else {
                     $SkippedCount.Value++
@@ -513,7 +662,9 @@ function Process-IndividualConflicts {
                 # 剩余全部覆盖
                 Write-Host "    🔄 剩余文件全部覆盖..." -ForegroundColor Cyan
                 $batchAction = "SyncAll"
-                if (Sync-SingleFile -ConflictItem $conflictItem) {
+                # 重新创建冲突项以获取最新的源文件内容
+                $updatedConflictItem = New-ConflictItem -Link $conflictItem.Link -Method $conflictItem.Method -TargetPath $conflictItem.TargetPath -SourcePath $conflictItem.SourcePath
+                if (Sync-SingleFile -ConflictItem $updatedConflictItem) {
                     Write-Host "    ✅ 覆盖: $($conflictItem.Link.Comment)" -ForegroundColor Green
                     $SyncedCount.Value++
                 } else {
@@ -530,7 +681,9 @@ function Process-IndividualConflicts {
             default {
                 # 无效选择，默认VS Code处理
                 Write-Host "    💡 无效选择，使用默认选项 (VS Code 合并)" -ForegroundColor Yellow
-                if (Invoke-VSCodeDiff -ConflictItem $conflictItem) {
+                # 重新创建冲突项以获取最新的源文件内容
+                $updatedConflictItem = New-ConflictItem -Link $conflictItem.Link -Method $conflictItem.Method -TargetPath $conflictItem.TargetPath -SourcePath $conflictItem.SourcePath
+                if (Invoke-VSCodeDiff -ConflictItem $updatedConflictItem) {
                     $SyncedCount.Value++
                 } else {
                     $SkippedCount.Value++
@@ -555,7 +708,6 @@ function Show-SyncSummary {
     if ($ConflictCount -gt 0) {
         Write-Host "    ⚠️ 冲突数: $ConflictCount 个文件" -ForegroundColor Yellow
     }
-    Write-Host ""
 }
 #endregion
 
