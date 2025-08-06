@@ -3,7 +3,8 @@
 
 $dotfilesDir = Split-Path $PSScriptRoot -Parent
 
-# 加载配置文件
+# 加载配置文件和共享函数
+. (Join-Path $PSScriptRoot "utils.ps1")
 $configFile = Join-Path $dotfilesDir "config.psd1"
 if (-not (Test-Path $configFile)) {
     Write-Error "配置文件未找到: $configFile"
@@ -55,17 +56,11 @@ foreach ($link in $config.Links) {
         } else {
             # 是普通文件
             if ($method -eq "Copy") {
-                try {
-                    $sourceContent = Get-Content $sourcePath -Raw -ErrorAction Stop
-                    $targetContent = Get-Content $targetPath -Raw -ErrorAction Stop
-                    
-                    if ($sourceContent -eq $targetContent) {
-                        Write-Host "    ✅ $configName $methodTag 已同步" -ForegroundColor Cyan
-                    } else {
-                        Write-Host "    ⚠️ $configName $methodTag 未同步" -ForegroundColor Yellow
-                    }
-                } catch {
-                    Write-Host "    ❌ $configName $methodTag 检查失败" -ForegroundColor Red
+                # 使用文件内容比较函数
+                if (Test-FileContentEqual -File1 $sourcePath -File2 $targetPath) {
+                    Write-Host "    ✅ $configName $methodTag 已同步" -ForegroundColor Cyan
+                } else {
+                    Write-Host "    ⚠️ $configName $methodTag 未同步" -ForegroundColor Yellow
                 }
             } elseif ($method -eq "Transform") {
                 try {
@@ -87,11 +82,8 @@ foreach ($link in $config.Links) {
                         # 转换基础配置到临时文件
                         & $transformScript -SourceFile $sourcePath -TargetFile $tempFile -TransformType $link.MappingId -ErrorAction Stop | Out-Null
                         
-                        # 比较转换后的内容与目标文件
-                        $convertedContent = Get-Content $tempFile -Raw -ErrorAction Stop
-                        $targetContent = Get-Content $targetPath -Raw -ErrorAction Stop
-                        
-                        if ($convertedContent -eq $targetContent) {
+                        # 使用JSON语义比较函数
+                        if (Test-JsonContentEqual -File1 $tempFile -File2 $targetPath) {
                             Write-Host "    ✅ $configName $methodTag 已同步" -ForegroundColor Cyan
                         } else {
                             Write-Host "    ⚠️ $configName $methodTag 未同步" -ForegroundColor Yellow

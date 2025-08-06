@@ -86,24 +86,7 @@ $script:Force = ($Action -eq "force")
 $script:Silent = ($Action -eq "silent")
 $script:DotfilesDir = Split-Path $PSScriptRoot -Parent
 $script:Config = Get-ConfigData
-#endregion
-
-#region 文件比较
-# 比较文件内容
-function Test-FileContentEqual {
-    param(
-        [Parameter(Mandatory)][string]$File1,
-        [Parameter(Mandatory)][string]$File2
-    )
-
-    try {
-        $content1 = Get-Content $File1 -Raw -ErrorAction Stop
-        $content2 = Get-Content $File2 -Raw -ErrorAction Stop
-        return $content1 -eq $content2
-    } catch {
-        return $false
-    }
-}
+. (Join-Path $PSScriptRoot "utils.ps1")
 #endregion
 
 #region 同步处理函数
@@ -199,29 +182,35 @@ function Test-FileConflict {
 
     switch ($Method) {
         "Copy" {
-            return -not (Test-FileContentEqual $TargetPath $SourcePath)
+            return -not (Test-FileContentEqual -File1 $TargetPath -File2 $SourcePath)
         }
         "Transform" {
+            # 对于Transform，我们需要进行反向转换，然后进行语义比较
             if (-not $Link.MappingId) {
                 Write-Host "    ❌ Transform配置缺少MappingId参数: $($Link.Comment)" -ForegroundColor Red
-                return $false
+                return $false # 标记为无冲突，但记录错误
             }
-
+            
             $transformScript = Join-Path $PSScriptRoot "transform.ps1"
             if (-not (Test-Path $transformScript)) {
                 Write-Host "    ❌ 转换脚本未找到: $transformScript" -ForegroundColor Red
-                return $false
+                return $false # 标记为无冲突
             }
 
             try {
+                # 使用临时文件来存储反向转换的结果
                 return Invoke-WithTempFiles -Count 1 -ScriptBlock {
                     param($tempFile)
+                    
+                    # 执行反向转换：将 Target 的内容反向转换为基础格式，存入临时文件
                     & $transformScript -SourceFile $TargetPath -TargetFile $tempFile -TransformType $Link.MappingId -Reverse -ErrorAction Stop | Out-Null
-                    return -not (Test-FileContentEqual $tempFile $SourcePath)
+                    
+                    # 使用JSON语义比较函数，比较反转后的临时文件和原始Source文件
+                    return -not (Test-JsonContentEqual -File1 $tempFile -File2 $SourcePath)
                 }
             } catch {
                 Write-Host "    ❌ 转换失败: $($Link.Comment). 错误: $($_.Exception.Message)" -ForegroundColor Red
-                return $false
+                return $false # 转换失败也标记为无冲突，避免误操作
             }
         }
         default {
@@ -362,22 +351,16 @@ function Invoke-VSCodeDiff {
         Write-Host ""
         & code --diff $tempUserFile $tempDotfilesFile --wait
 
-        # 用户完成后，检查右侧文件是否有修改
-        if (-not (Test-FileContentEqual $tempDotfilesFile $ConflictItem.OriginalDotfilesContent)) {
-            # 应用合并结果
-            Copy-Item $tempDotfilesFile $ConflictItem.SourcePath -Force
-            
-            # 更新源文件跟踪器
-            $newContent = Get-Content $ConflictItem.SourcePath -Raw
-            Update-SourceFileCurrentContent -SourcePath $ConflictItem.SourcePath -NewContent $newContent
-            
-            Write-Host "    ✅ 合并完成: $($ConflictItem.Link.Comment)" -ForegroundColor Green
-            Write-Host "    合并结果 -> $($ConflictItem.SourcePath)" -ForegroundColor Gray
-            return $true
-        } else {
-            Write-Host "    ⏩ 未修改，跳过: $($ConflictItem.Link.Comment)" -ForegroundColor Cyan
-            return $false
-        }
+        # 应用合并结果（可能是用户修改后的，也可能是用户确认的原始版本）
+        Copy-Item $tempDotfilesFile $ConflictItem.SourcePath -Force
+        
+        # 更新源文件跟踪器
+        $newContent = Get-Content $ConflictItem.SourcePath -Raw
+        Update-SourceFileCurrentContent -SourcePath $ConflictItem.SourcePath -NewContent $newContent
+        
+        Write-Host "    ✅ 确认同步: $($ConflictItem.Link.Comment)" -ForegroundColor Green
+        Write-Host "    合并结果 -> $($ConflictItem.SourcePath)" -ForegroundColor Gray
+        return $true
     }
     catch {
         Write-Host "    ❌ VS Code 处理失败: $($ConflictItem.Link.Comment). 错误: $($_.Exception.Message)" -ForegroundColor Red
@@ -457,28 +440,29 @@ function Process-ConfigLink {
     # 检查冲突
     $hasConflict = Test-FileConflict -Link $Link -TargetPath $targetPath -SourcePath $sourcePath -Method $method
 
-    if ($hasConflict -and -not $script:Force) {
-        # 收集冲突项
-        $ConflictItems.Value += New-ConflictItem -Link $Link -Method $method -TargetPath $targetPath -SourcePath $sourcePath
-    } else {
-        # 处理无冲突或强制模式
-        $shouldSync = $true
-
-        if ($script:Silent -and $hasConflict) {
-            Write-Host "    ⏩ 静默模式，跳过冲突: $($Link.Comment)" -ForegroundColor Cyan
-            $shouldSync = $false
-        }
-
-        if ($shouldSync) {
+    if ($hasConflict) {
+        # 检测到冲突
+        if ($script:Force) {
+            # 强制模式：直接同步
+            Write-Host "    - 强制同步: $($Link.Comment)" -ForegroundColor Cyan
             $conflictItem = New-ConflictItem -Link $Link -Method $method -TargetPath $targetPath -SourcePath $sourcePath
             if (Sync-SingleFile -ConflictItem $conflictItem) {
                 $SyncedCount.Value++
             } else {
                 $SkippedCount.Value++
             }
-        } else {
+        } elseif ($script:Silent) {
+            # 静默模式：跳过冲突
+            Write-Host "    ⏩ 静默模式，跳过冲突: $($Link.Comment)" -ForegroundColor Cyan
             $SkippedCount.Value++
+        } else {
+            # 交互模式：收集冲突项以供后续处理
+            $ConflictItems.Value += New-ConflictItem -Link $Link -Method $method -TargetPath $targetPath -SourcePath $sourcePath
         }
+    } else {
+        # 没有冲突，报告已同步并跳过
+        Write-Host "    ✅ 已同步: $($Link.Comment)" -ForegroundColor Green
+        $SkippedCount.Value++
     }
 }
 
