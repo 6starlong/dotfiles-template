@@ -4,10 +4,10 @@
 # 对于其他方法：直接删除文件
 
 $ErrorActionPreference = 'Stop'
-$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
+$dotfilesDir = Split-Path $PSScriptRoot -Parent
 
 # 引入共享函数
-. (Join-Path $PSScriptRoot "utils.ps1")
+Import-Module (Join-Path $PSScriptRoot "utils.psm1")
 
 # 智能移除 JSON 字段
 function Remove-JsonField {
@@ -20,8 +20,8 @@ function Remove-JsonField {
     try {
         # 解析转换类型参数
         $parts = $TransformType -split ":"
-        if ($parts.Length -ne 2) { 
-            throw "无效的转换类型格式。预期格式为'format:platform'。" 
+        if ($parts.Length -ne 2) {
+            throw "无效的转换类型格式。预期格式为'format:platform'。"
         }
         $format = $parts[0]
         $platform = $parts[1]
@@ -29,14 +29,14 @@ function Remove-JsonField {
         # 获取配置并确定字段映射
         $config = Get-TransformConfig -Format $format
         $defaultField = $config.defaultField
-        $platformField = if ($config.platforms.psobject.Properties[$platform]) { 
+        $platformField = if ($config.platforms.psobject.Properties[$platform]) {
             $config.platforms.$platform 
-        } else { 
-            $config.defaultField 
+        } else {
+            $config.defaultField
         }
 
-        if (-not $defaultField -or -not $platformField) { 
-            throw "无法确定默认字段或平台字段。" 
+        if (-not $defaultField -or -not $platformField) {
+            throw "无法确定默认字段或平台字段。"
         }
 
         # 读取源文件，获取所有源文件的字段名
@@ -119,7 +119,7 @@ function Remove-JsonField {
 # 主执行逻辑
 try {
     # 加载配置文件
-    $configFile = Join-Path $script:DotfilesDir "config.psd1"
+    $configFile = Join-Path $dotfilesDir "config.psd1"
     if (-not (Test-Path $configFile)) {
         Write-Error "配置文件未找到: $configFile"
         return
@@ -147,7 +147,7 @@ try {
         try {
             if ($method -eq "Transform" -and $link.MappingId) {
                 # 智能移除 JSON 字段
-                $sourcePath = Join-Path $script:DotfilesDir $link.Source
+                $sourcePath = Join-Path $dotfilesDir $link.Source
                 $result = Remove-JsonField -FilePath $targetPath -TransformType $link.MappingId -SourceFile $sourcePath
                 if ($result) {
                     if (Test-Path $targetPath) {

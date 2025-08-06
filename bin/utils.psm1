@@ -1,8 +1,11 @@
-# utils.ps1
-# transform.ps1 和 uninstall.ps1 的共享函数
+# utils.psm1
+
+# 模块级变量：计算 dotfiles 根目录
+$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
 
 # 将JSONC内容转换为JSON对象
 function ConvertFrom-Jsonc {
+    [CmdletBinding()]
     param (
         [Parameter(Mandatory, ValueFromPipeline)]
         [string]$Content
@@ -17,7 +20,12 @@ function ConvertFrom-Jsonc {
 
 # 获取转换配置
 function Get-TransformConfig {
-    param([string]$Format)
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Format
+    )
+    
     $configPath = Join-Path $script:DotfilesDir "$Format\platforms.json"
     if (-not (Test-Path $configPath)) { 
         throw "配置文件未找到: $configPath" 
@@ -28,35 +36,40 @@ function Get-TransformConfig {
 
 # 清理和标准化JSON格式
 function Format-JsonClean {
-    param([string]$JsonString, [int]$Indent = 2)
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$JsonString,
+        [int]$Indent = 2
+    )
     
     # 移除PowerShell的多余空格和奇怪格式
-    $cleanJson = $JsonString -replace '\s*:\s*\[\s*\]', ': []'
-    $cleanJson = $cleanJson -replace '\s*:\s*\{\s*\}', ': {}'
-    $cleanJson = $cleanJson -replace ':\s+\[', ': ['
-    $cleanJson = $cleanJson -replace ':\s+\{', ': {'
-    $cleanJson = $cleanJson -replace ':\s+(["\d\[\{])', ': $1'
-    $cleanJson = $cleanJson -replace '(?m)^\s*$\n', ''
+    $cleanJson = $JsonString -replace '\s*:\s*\[\s*\]', ': []' `
+                              -replace '\s*:\s*\{\s*\}', ': {}' `
+                              -replace ':\s+\[', ': [' `
+                              -replace ':\s+\{', ': {' `
+                              -replace ':\s+(["\d\[\{])', ': $1' `
+                              -replace '(?m)^\s*$\n', ''
     
     # 重新格式化缩进
     $lines = $cleanJson -split "`r?`n"
-    $result = @()
+    $result = [System.Collections.Generic.List[string]]::new()
     $currentIndent = 0
     
     foreach ($line in $lines) {
         $trimmed = $line.Trim()
-        if (-not $trimmed) { continue }
+        if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
         
         # 调整缩进级别
-        if ($trimmed -match '^[\}\]]') {
+        if ($trimmed.StartsWith('}') -or $trimmed.StartsWith(']')) {
             $currentIndent = [Math]::Max(0, $currentIndent - 1)
         }
         
         # 添加正确缩进的行
-        $result += (' ' * ($currentIndent * $Indent)) + $trimmed
+        $result.Add((' ' * ($currentIndent * $Indent)) + $trimmed)
         
         # 为下一行调整缩进
-        if ($trimmed -match '[\{\[]$') {
+        if ($trimmed.EndsWith('{') -or $trimmed.EndsWith('[')) {
             $currentIndent++
         }
     }
@@ -66,6 +79,7 @@ function Format-JsonClean {
 
 # 比较两个文件的原始内容是否相等
 function Test-FileContentEqual {
+    [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$File1,
         [Parameter(Mandatory)][string]$File2
@@ -86,6 +100,7 @@ function Test-FileContentEqual {
 
 # 比较两个JSON/JSONC文件的语义内容是否相等（忽略注释和格式）
 function Test-JsonContentEqual {
+    [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$File1,
         [Parameter(Mandatory)][string]$File2
@@ -112,3 +127,6 @@ function Test-JsonContentEqual {
         return $false
     }
 }
+
+# 导出模块成员
+Export-ModuleMember -Function *-*

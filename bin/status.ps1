@@ -4,7 +4,7 @@
 $dotfilesDir = Split-Path $PSScriptRoot -Parent
 
 # 加载配置文件和共享函数
-. (Join-Path $PSScriptRoot "utils.ps1")
+Import-Module (Join-Path $PSScriptRoot "utils.psm1")
 $configFile = Join-Path $dotfilesDir "config.psd1"
 if (-not (Test-Path $configFile)) {
     Write-Error "配置文件未找到: $configFile"

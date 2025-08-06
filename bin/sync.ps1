@@ -86,7 +86,7 @@ $script:Force = ($Action -eq "force")
 $script:Silent = ($Action -eq "silent")
 $script:DotfilesDir = Split-Path $PSScriptRoot -Parent
 $script:Config = Get-ConfigData
-. (Join-Path $PSScriptRoot "utils.ps1")
+Import-Module (Join-Path $PSScriptRoot "utils.psm1")
 #endregion
 
 #region 同步处理函数

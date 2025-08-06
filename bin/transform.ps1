@@ -14,10 +14,9 @@ param(
 
 $TransformType = $TransformType.Trim("'", '"')
 $ErrorActionPreference = 'Stop'
-$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
 
 # 引入共享函数
-. (Join-Path $PSScriptRoot "utils.ps1")
+Import-Module (Join-Path $PSScriptRoot "utils.psm1")
 
 # 智能合并对象，保持原有结构
 function Merge-Objects {
@@ -56,8 +55,8 @@ function Merge-Objects {
 try {
     # 解析转换类型参数
     $parts = $TransformType -split ":"
-    if ($parts.Length -ne 2) { 
-        throw "无效的转换类型格式。预期格式为'format:platform'。" 
+    if ($parts.Length -ne 2) {
+        throw "无效的转换类型格式。预期格式为'format:platform'。"
     }
     $format = $parts[0]
     $platform = $parts[1]
@@ -65,28 +64,28 @@ try {
     # 获取配置并确定字段映射
     $config = Get-TransformConfig -Format $format
     $defaultField = $config.defaultField
-    $platformField = if ($config.platforms.psobject.Properties[$platform]) { 
+    $platformField = if ($config.platforms.psobject.Properties[$platform]) {
         $config.platforms.$platform 
-    } else { 
-        $config.defaultField 
+    } else {
+        $config.defaultField
     }
 
-    if (-not $defaultField -or -not $platformField) { 
-        throw "无法确定默认字段或平台字段。" 
+    if (-not $defaultField -or -not $platformField) {
+        throw "无法确定默认字段或平台字段。"
     }
 
     # 检查并读取源文件
-    if (-not (Test-Path $SourceFile)) { 
-        throw "源文件未找到: $SourceFile" 
+    if (-not (Test-Path $SourceFile)) {
+        throw "源文件未找到: $SourceFile"
     }
     $sourceContent = Get-Content $SourceFile -Raw -Encoding UTF8
     $sourceObject = ConvertFrom-Jsonc -Content $sourceContent
 
     # 确定转换方向的键名
     $sourceKey, $targetKey = if ($Reverse) {
-        $platformField, $defaultField 
+        $platformField, $defaultField
     } else { 
-        $defaultField, $platformField 
+        $defaultField, $platformField
     }
     
     # 验证源文件包含所需的键
