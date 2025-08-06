@@ -9,13 +9,13 @@
 # - Source: 源文件路径（相对于仓库根目录）
 # - Target: 目标路径（使用 {USERPROFILE} 占位符）
 # - Comment: 配置描述
-# - Method: 部署方法 "SymLink"（默认）或 "Copy" 或 "Transform"
-# - MappingId: 映射标识符，用于区分多个目标指向同一源的情况，也用于临时文件命名
+# - Method: 部署方法 "SymLink"（默认）、"Copy" 或 "Transform"
+# - MappingId: 转换映射ID，格式为 "类型:平台"（Transform 方法时必需）
 
 @{
     # 默认部署方法
-    # "SymLink" - 创建符号链接
-    # "Copy" - 直接复制文件（适用于会被应用修改的配置）
+    # "SymLink"   - 创建符号链接（推荐，节省空间且保持同步）
+    # "Copy"      - 直接复制文件（适用于会被应用修改的配置）
     # "Transform" - 转换格式后复制（适用于需要格式转换的配置）
     DefaultMethod = "SymLink"
 
@@ -37,38 +37,52 @@
         TimestampFormat = "yyyy-MM-dd_HH-mm-ss"
     }
 
-    # 配置链接
+    # 转换配置 - 定义不同类型配置文件的转换规则
+    TransformSettings = @{
+        # MCP (Model Context Protocol) 配置转换规则
+        "mcp" = @{
+            # 默认字段名（当平台未在 Platforms 中定义时使用）
+            DefaultField = "mcpServers"
+            # 平台特定的字段映射
+            Platforms = @{
+                "vscode" = "servers"      # VSCode 使用 servers 字段
+            }
+        }
+    }
+
+    # 配置链接 - 定义源文件到目标位置的映射关系
     Links = @(
-        # 示例格式：
+        # 配置项格式说明：
         # @{
         #     Source    = "path\to\source.ext"                # 源文件路径
         #     Target    = "{USERPROFILE}\path\to\target.ext"  # 目标路径
         #     Comment   = "Config description"                # 配置描述
-        #     Method    = "SymLink"                           # 部署方法（可选）
-        #     MappingId = "mapping:id"                        # 映射ID（可选）
+        #     Method    = "SymLink"                           # 部署方法
+        #     MappingId = "type:platform"                     # 转换映射ID
         # }
 
 
-        # Test 配置
+        # ==================== 测试配置 ====================
         @{
-            Source    = "test\demo.txt"
-            Target    = "D:\Projects\dotfiles\test\demo1.txt"
-            Comment   = "Test 1"
-            Method    = "Copy"
+            Source  = "test\demo.txt"
+            Target  = "D:\Projects\dotfiles\test\demo1.txt"
+            Comment = "测试配置 1"
+            Method  = "Copy"
         }
 
         @{
-            Source    = "test\demo.txt"
-            Target    = "D:\Projects\dotfiles\test\demo2.txt"
-            Comment   = "Test 2"
-            Method    = "Copy"
+            Source  = "test\demo.txt"
+            Target  = "D:\Projects\dotfiles\test\demo2.txt"
+            Comment = "测试配置 2"
+            Method  = "Copy"
         }
 
-        # MCP 配置文件
+        # ==================== MCP 配置文件 ====================
+        # 测试环境配置
         @{
             Source    = "mcp\base.json"
             Target    = "D:\Projects\dotfiles\test\demo.json"
-            Comment   = "MCP Config for Demo"
+            Comment   = "MCP 演示配置"
             Method    = "Transform"
             MappingId = "mcp:demo"
         }
@@ -76,15 +90,16 @@
         @{
             Source    = "mcp\base.json"
             Target    = "D:\Projects\dotfiles\test\vscode-mcp.json"
-            Comment   = "MCP Config for VSCode"
+            Comment   = "MCP VSCode 测试配置"
             Method    = "Transform"
             MappingId = "mcp:vscode"
         }
 
+        # 生产环境配置（取消注释以启用）
         # @{
         #     Source    = "mcp\base.json"
         #     Target    = "{USERPROFILE}\AppData\Roaming\Code\User\mcp.json"
-        #     Comment   = "MCP Config for VSCode"
+        #     Comment   = "VSCode MCP 配置"
         #     Method    = "Transform"
         #     MappingId = "mcp:vscode"
         # }
@@ -92,7 +107,7 @@
         # @{
         #     Source    = "mcp\base.json"
         #     Target    = "{USERPROFILE}\.cursor\mcp.json"
-        #     Comment   = "MCP Config for Cursor"
+        #     Comment   = "Cursor MCP 配置"
         #     Method    = "Transform"
         #     MappingId = "mcp:cursor"
         # }

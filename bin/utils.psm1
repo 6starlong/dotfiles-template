@@ -26,12 +26,18 @@ function Get-TransformConfig {
         [string]$Format
     )
     
-    $configPath = Join-Path $script:DotfilesDir "$Format\platforms.json"
-    if (-not (Test-Path $configPath)) { 
-        throw "配置文件未找到: $configPath" 
+    # 加载配置文件
+    $configFile = Join-Path $script:DotfilesDir "config.psd1"
+    if (-not (Test-Path $configFile)) {
+        throw "配置文件未找到: $configFile"
     }
-    $configContent = Get-Content $configPath -Raw -Encoding UTF8
-    return ConvertFrom-Jsonc -Content $configContent
+    
+    $config = Import-PowerShellDataFile $configFile
+    if (-not $config.TransformSettings.ContainsKey($Format)) {
+        throw "转换配置未找到: $Format"
+    }
+    
+    return $config.TransformSettings[$Format]
 }
 
 # 清理和标准化JSON格式

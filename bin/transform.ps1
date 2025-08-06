@@ -63,13 +63,15 @@ try {
 
     # 获取配置并确定字段映射
     $config = Get-TransformConfig -Format $format
-    $defaultField = $config.defaultField
-    $platformField = if ($config.platforms.psobject.Properties[$platform]) {
-        $config.platforms.$platform 
-    } else {
-        $config.defaultField
+    $defaultField = $config.DefaultField
+    
+    # 获取平台特定字段
+    $platformField = $config.DefaultField  # 默认值
+    $platformValue = $config.Platforms.$platform
+    if ($platformValue) {
+        $platformField = $platformValue
     }
-
+    
     if (-not $defaultField -or -not $platformField) {
         throw "无法确定默认字段或平台字段。"
     }
