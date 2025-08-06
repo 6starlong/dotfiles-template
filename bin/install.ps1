@@ -54,11 +54,9 @@ if (-not (Test-Administrator)) {
         # 加载配置以获取项目前缀
         $configFile = Join-Path $dotfilesDir "config.psd1"
         $projectPrefix = "dotfiles" # 默认值
-        if (Test-Path $configFile) {
-            $config = Import-PowerShellDataFile -Path $configFile
-            if ($config.ProjectSettings -and $config.ProjectSettings.ProjectPrefix) {
-                $projectPrefix = $config.ProjectSettings.ProjectPrefix
-            }
+        $config = Import-PowerShellDataFile -Path $configFile
+        if ($config.ProjectSettings -and $config.ProjectSettings.ProjectPrefix) {
+            $projectPrefix = $config.ProjectSettings.ProjectPrefix
         }
 
         # 创建临时日志文件

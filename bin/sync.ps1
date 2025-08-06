@@ -292,51 +292,49 @@ function Invoke-VSCodeDiff {
     Write-Host "    📝 启动 VS Code 差异视图..." -ForegroundColor Cyan
     Write-Host ""
     Write-Host "    操作说明:" -ForegroundColor Yellow
-    Write-Host "    • 左侧: 当前配置 (系统版本)" -ForegroundColor Gray
-    Write-Host "    • 右侧: Dotfiles (仓库版本)" -ForegroundColor Gray
+    Write-Host "    • 左侧: System (系统中的版本)" -ForegroundColor Gray
+    Write-Host "    • 右侧: Repo (仓库中的版本)" -ForegroundColor Gray
     Write-Host "    • 点击差异块旁的箭头选择保留哪一侧的修改" -ForegroundColor Gray
     Write-Host "    • 或直接编辑右侧文件进行自定义合并" -ForegroundColor Gray
     Write-Host "    • 完成后请保存右侧文件并关闭 VS Code 标签页" -ForegroundColor Gray
     Write-Host ""
 
-    # 创建基于映射ID的临时文件名
+    # 创建统一的临时文件名
     $tempDir = [System.IO.Path]::GetTempPath()
     $projectPrefix = if ($script:Config.ProjectSettings -and $script:Config.ProjectSettings.ProjectPrefix) {
         $script:Config.ProjectSettings.ProjectPrefix
     } else {
         "dotfiles"
     }
-    
-    # 构建目标文件名：[项目前缀]_[映射ID]_current.[扩展名]
-    $targetExtension = [System.IO.Path]::GetExtension($ConflictItem.TargetPath)
-    if ($ConflictItem.Link.MappingId) {
-        # 有映射ID的情况，使用映射ID（替换 : 为 -）
-        $cleanMappingId = $ConflictItem.Link.MappingId -replace ":", "-"
-        $tempUserFile = Join-Path $tempDir "$projectPrefix`_$cleanMappingId`_current$targetExtension"
+
+    # 确定统一的名称主干 (baseName)
+    $identifier = if ($ConflictItem.Link.MappingId) {
+        $ConflictItem.Link.MappingId -replace ":", "-"
     } else {
-        # 没有映射ID的情况，使用目标文件名
-        $targetBaseName = [System.IO.Path]::GetFileNameWithoutExtension($ConflictItem.TargetPath)
-        $tempUserFile = Join-Path $tempDir  "$projectPrefix`_$targetBaseName`_current$targetExtension"
+        # 使用 Source 路径作为备选，并清理特殊字符
+        $sourceRelativePath = $ConflictItem.Link.Source -replace "[\\/]", "-"
+        $sourceExtension = [System.IO.Path]::GetExtension($ConflictItem.SourcePath)
+        if ($sourceRelativePath.EndsWith($sourceExtension)) {
+            $sourceRelativePath.Substring(0, $sourceRelativePath.Length - $sourceExtension.Length)
+        } else {
+            $sourceRelativePath
+        }
     }
-    
-    # 构建源文件名：[项目前缀]_[文件路径]_target.[扩展名]
-    $sourceExtension = [System.IO.Path]::GetExtension($ConflictItem.SourcePath)
-    $sourceRelativePath = $ConflictItem.Link.Source -replace "[\\/]", "-"
-    # 移除扩展名以避免重复（更精确的移除方式）
-    if ($sourceRelativePath.EndsWith($sourceExtension)) {
-        $sourceRelativePath = $sourceRelativePath.Substring(0, $sourceRelativePath.Length - $sourceExtension.Length)
-    }
-    $tempDotfilesFile = Join-Path $tempDir "$projectPrefix`_$sourceRelativePath`_target$sourceExtension"
+    $baseName = "$projectPrefix-$identifier"
+
+    # 构建最终的临时文件名
+    $extension = [System.IO.Path]::GetExtension($ConflictItem.TargetPath)
+    $tempSystemFile = Join-Path $tempDir "$baseName-system$extension"
+    $tempRepoFile = Join-Path $tempDir "$baseName-repo$extension"
 
     try {
-        
         # 准备文件内容用于比较，确保编码一致性
-        # 读取目标文件内容并以 UTF-8 with BOM 写入临时文件
-        $targetContent = Get-Content $ConflictItem.TargetPath -Raw
-        [System.IO.File]::WriteAllText($tempUserFile, $targetContent, [System.Text.UTF8Encoding]::new($true))
+        # 读取系统文件内容并以 UTF-8 with BOM 写入临时文件
+        $systemContent = Get-Content $ConflictItem.TargetPath -Raw
+        [System.IO.File]::WriteAllText($tempSystemFile, $systemContent, [System.Text.UTF8Encoding]::new($true))
         
-        # # 使用 UTF-8 with BOM 确保中文在 VS Code 中正常显示
-        [System.IO.File]::WriteAllText($tempDotfilesFile, $ConflictItem.OriginalDotfilesContent, [System.Text.UTF8Encoding]::new($true))
+        # 将仓库文件内容以 UTF-8 with BOM 写入临时文件
+        [System.IO.File]::WriteAllText($tempRepoFile, $ConflictItem.OriginalDotfilesContent, [System.Text.UTF8Encoding]::new($true))
 
         # 检查 VS Code 是否可用
         $codeExists = Get-Command "code" -ErrorAction SilentlyContinue
@@ -349,10 +347,10 @@ function Invoke-VSCodeDiff {
         # 打开 VS Code 差异视图
         Write-Host "    正在打开 VS Code... (请等待)" -ForegroundColor Gray
         Write-Host ""
-        & code --diff $tempUserFile $tempDotfilesFile --wait
+        & code --diff $tempSystemFile $tempRepoFile --wait
 
         # 应用合并结果（可能是用户修改后的，也可能是用户确认的原始版本）
-        Copy-Item $tempDotfilesFile $ConflictItem.SourcePath -Force
+        Copy-Item $tempRepoFile $ConflictItem.SourcePath -Force
         
         # 更新源文件跟踪器
         $newContent = Get-Content $ConflictItem.SourcePath -Raw
@@ -368,8 +366,8 @@ function Invoke-VSCodeDiff {
     }
     finally {
         # 清理临时文件
-        if (Test-Path $tempUserFile) { Remove-Item $tempUserFile -Force -ErrorAction SilentlyContinue }
-        if (Test-Path $tempDotfilesFile) { Remove-Item $tempDotfilesFile -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $tempSystemFile) { Remove-Item $tempSystemFile -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $tempRepoFile) { Remove-Item $tempRepoFile -Force -ErrorAction SilentlyContinue }
     }
 }
 #endregion
