@@ -9,7 +9,6 @@ param(
     [string]$TargetFile,
     [Parameter(Mandatory = $true)]
     [string]$TransformType,
-    [switch]$Reverse,
     [switch]$Overwrite
 )
 
@@ -54,12 +53,8 @@ try {
 
     # 仅当字段映射有效且需要转换时才执行
     if ($defaultField -and $platformField -and $defaultField -ne $platformField) {
-        # 确定转换方向的键名
-        $sourceKey, $targetKey = if ($Reverse) {
-            $platformField, $defaultField
-        } else { 
-            $defaultField, $platformField
-        }
+        $sourceKey = $defaultField
+        $targetKey = $platformField
         
         # 如果源对象包含需要转换的键
         if ($sourceObject.psobject.Properties.Name -contains $sourceKey) {

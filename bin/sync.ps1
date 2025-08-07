@@ -2,32 +2,7 @@
 # 将系统中的配置文件同步回 dotfiles 仓库
 # 支持 Copy 和 Transform 方法的配置文件
 
-param(
-    [Parameter(Position=0, Mandatory=$false)]
-    [ValidateSet("sync", "force", "silent", "help")]
-    [string]$Action = "sync"
-)
-
 #region 辅助函数
-# 显示帮助信息
-function Show-HelpMessage {
-    Write-Host ""
-    Write-Host "📋 同步工具使用说明" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "用法: .\sync.ps1 [action]" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "可用操作:" -ForegroundColor Yellow
-    Write-Host "  sync     - 交互式同步 (默认)" -ForegroundColor White
-    Write-Host "  force    - 强制同步(覆盖所有冲突)" -ForegroundColor White
-    Write-Host "  silent   - 静默模式(跳过所有冲突)" -ForegroundColor White
-    Write-Host "  help     - 显示此帮助信息" -ForegroundColor White
-    Write-Host ""
-    Write-Host "示例:" -ForegroundColor Yellow
-    Write-Host "  .\sync.ps1                  # 交互式同步" -ForegroundColor Gray
-    Write-Host "  .\sync.ps1 force            # 强制同步" -ForegroundColor Gray
-    Write-Host "  .\sync.ps1 silent           # 静默同步" -ForegroundColor Gray
-    Write-Host ""
-}
 
 # 加载配置数据
 function Get-ConfigData {
@@ -39,17 +14,27 @@ function Get-ConfigData {
     return Import-PowerShellDataFile -Path $configFile
 }
 
-# 展开路径变量
-function Expand-Path {
-    param([string]$Path)
-    return Resolve-ConfigPath -Path $Path -DotfilesDir $script:DotfilesDir
-}
-
 # 获取部署方法
 function Get-Method {
     param([hashtable]$Link)
     $method = if ($Link.Method) { $Link.Method } else { $script:Config.DefaultMethod }
     if ($method) { return $method } else { return "SymLink" }
+}
+
+# 统一的UTF-8文件读取函数
+function Read-Utf8File {
+    param([string]$Path)
+    if (Test-Path $Path) {
+        return [System.IO.File]::ReadAllText($Path, [System.Text.UTF8Encoding]::new($true))
+    } else {
+        return ""
+    }
+}
+
+# 统一的UTF-8文件写入函数
+function Write-Utf8File {
+    param([string]$Path, [string]$Content)
+    [System.IO.File]::WriteAllText($Path, $Content, [System.Text.UTF8Encoding]::new($true))
 }
 
 # 安全执行临时文件操作
@@ -75,15 +60,7 @@ function Invoke-WithTempFiles {
 #endregion
 
 #region 初始化
-# 处理帮助信息
-if ($Action -eq "help") {
-    Show-HelpMessage
-    return
-}
-
 # 设置全局变量
-$script:Force = ($Action -eq "force")
-$script:Silent = ($Action -eq "silent")
 $script:DotfilesDir = Split-Path $PSScriptRoot -Parent
 $script:Config = Get-ConfigData
 Import-Module (Join-Path $PSScriptRoot "utils.psm1")
@@ -107,12 +84,7 @@ function Initialize-SourceFileTracker {
         if ([string]::IsNullOrEmpty($sourcePath)) {
             continue
         }
-        $originalContent = if (Test-Path $sourcePath) {
-            # 使用 .NET 方法正确读取 UTF-8 with BOM 文件
-            [System.IO.File]::ReadAllText($sourcePath, [System.Text.UTF8Encoding]::new($true))
-        } else { 
-            "" 
-        }
+        $originalContent = Read-Utf8File -Path $sourcePath
         
         $script:SourceFileTracker[$sourcePath] = @{
             OriginalContent = $originalContent
@@ -136,12 +108,7 @@ function Get-SourceFileCurrentContent {
     }
     
     # 如果没有跟踪，返回文件原始内容
-    if (Test-Path $SourcePath) { 
-        # 使用 .NET 方法正确读取 UTF-8 with BOM 文件
-        return [System.IO.File]::ReadAllText($SourcePath, [System.Text.UTF8Encoding]::new($true))
-    } else { 
-        return "" 
-    }
+    return Read-Utf8File -Path $SourcePath
 }
 
 # 更新源文件当前内容
@@ -185,7 +152,6 @@ function Test-FileConflict {
             return -not (Test-FileContentEqual -File1 $TargetPath -File2 $SourcePath)
         }
         "Transform" {
-            # 对于Transform，我们需要进行反向转换，然后进行语义比较
             if (-not $Link.MappingId) {
                 Write-Host "    ❌ Transform配置缺少MappingId参数: $($Link.Comment)" -ForegroundColor Red
                 return $false # 标记为无冲突，但记录错误
@@ -198,65 +164,25 @@ function Test-FileConflict {
             }
 
             try {
-                # 使用临时文件来存储反向转换的结果
+                # 统一使用正向转换进行比较，与 status.ps1 逻辑一致
                 return Invoke-WithTempFiles -Count 1 -ScriptBlock {
                     param($tempFile)
                     
-                    # 执行反向转换：将 Target 的内容反向转换为基础格式，存入临时文件
-                    & $transformScript -SourceFile $TargetPath -TargetFile $tempFile -TransformType $Link.MappingId -Reverse -ErrorAction Stop | Out-Null
+                    # 将源文件（或分层合并结果）正向转换到临时文件
+                    & $transformScript -SourceFile $SourcePath -TargetFile $tempFile -TransformType $Link.MappingId -ErrorAction Stop | Out-Null
                     
-                    # 使用JSON语义比较函数，比较反转后的临时文件和原始Source文件
-                    return -not (Test-JsonContentEqual -File1 $tempFile -File2 $SourcePath)
+                    # 使用JSON语义比较函数，比较转换后的临时文件和当前的目标文件
+                    # 如果不相等，则说明有冲突
+                    return -not (Test-JsonContentEqual -File1 $tempFile -File2 $TargetPath)
                 }
             } catch {
-                Write-Host "    ❌ 转换失败: $($Link.Comment). 错误: $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "    ❌ 转换检查失败: $($Link.Comment). 错误: $($_.Exception.Message)" -ForegroundColor Red
                 return $false # 转换失败也标记为无冲突，避免误操作
             }
         }
         default {
             return $false
         }
-    }
-}
-
-# 同步单个文件
-function Sync-SingleFile {
-    param([Parameter(Mandatory)][hashtable]$ConflictItem)
-
-    try {
-        switch ($ConflictItem.Method) {
-            "Copy" {
-                Copy-Item $ConflictItem.TargetPath $ConflictItem.SourcePath -Force
-                
-                # 更新源文件跟踪器
-                $newContent = Get-Content $ConflictItem.SourcePath -Raw
-                Update-SourceFileCurrentContent -SourcePath $ConflictItem.SourcePath -NewContent $newContent
-                
-                Write-Host "    ✅ 同步: $($ConflictItem.Link.Comment)" -ForegroundColor Green
-                Write-Host "    $($ConflictItem.TargetPath) -> $($ConflictItem.SourcePath)" -ForegroundColor Gray
-            }
-            "Transform" {
-                Invoke-WithTempFiles -Count 1 -ScriptBlock {
-                    param($tempFile)
-                    & $ConflictItem.TransformScript -SourceFile $ConflictItem.TargetPath -TargetFile $tempFile -TransformType $ConflictItem.Link.MappingId -Reverse -ErrorAction Stop | Out-Null
-                    Copy-Item $tempFile $ConflictItem.SourcePath -Force
-                    
-                    # 更新源文件跟踪器
-                    $newContent = Get-Content $ConflictItem.SourcePath -Raw
-                    Update-SourceFileCurrentContent -SourcePath $ConflictItem.SourcePath -NewContent $newContent
-                    
-                    Write-Host "    ✅ 同步(转换): $($ConflictItem.Link.Comment)" -ForegroundColor Green
-                    Write-Host "    $($ConflictItem.TargetPath) -> $($ConflictItem.SourcePath) (反向转换)" -ForegroundColor Gray
-                }
-            }
-            default {
-                throw "不支持的同步方法: $($ConflictItem.Method)"
-            }
-        }
-        return $true
-    } catch {
-        Write-Host "    ❌ 同步失败: $($ConflictItem.Link.Comment). 错误: $($_.Exception.Message)" -ForegroundColor Red
-        return $false
     }
 }
 
@@ -284,7 +210,6 @@ function New-ConflictItem {
 #endregion
 
 #region VS Code 差异处理
-# VS Code 交互式差异处理
 function Invoke-VSCodeDiff {
     param([Parameter(Mandatory)][hashtable]$ConflictItem)
 
@@ -292,11 +217,10 @@ function Invoke-VSCodeDiff {
     Write-Host "    📝 启动 VS Code 差异视图..." -ForegroundColor Cyan
     Write-Host ""
     Write-Host "    操作说明:" -ForegroundColor Yellow
-    Write-Host "    • 左侧: System (系统中的版本)" -ForegroundColor Gray
-    Write-Host "    • 右侧: Repo (仓库中的版本)" -ForegroundColor Gray
-    Write-Host "    • 点击差异块旁的箭头选择保留哪一侧的修改" -ForegroundColor Gray
-    Write-Host "    • 或直接编辑右侧文件进行自定义合并" -ForegroundColor Gray
-    Write-Host "    • 完成后请保存右侧文件并关闭 VS Code 标签页" -ForegroundColor Gray
+    Write-Host "    • 左侧: System (系统中的文件)。" -ForegroundColor Gray
+    Write-Host "    • 右侧: Repo (仓库中的文件)。" -ForegroundColor Gray
+    Write-Host "    • 请在右侧合并修改 (箭头选择或手动编辑)。" -ForegroundColor Gray
+    Write-Host "    • 完成后保存并关闭 VS Code 标签页。" -ForegroundColor Gray
     Write-Host ""
 
     # 创建统一的临时文件名
@@ -331,10 +255,10 @@ function Invoke-VSCodeDiff {
         # 准备文件内容用于比较，确保编码一致性
         # 读取系统文件内容并以 UTF-8 with BOM 写入临时文件
         $systemContent = Get-Content $ConflictItem.TargetPath -Raw
-        [System.IO.File]::WriteAllText($tempSystemFile, $systemContent, [System.Text.UTF8Encoding]::new($true))
+        Write-Utf8File -Path $tempSystemFile -Content $systemContent
         
         # 将仓库文件内容以 UTF-8 with BOM 写入临时文件
-        [System.IO.File]::WriteAllText($tempRepoFile, $ConflictItem.OriginalDotfilesContent, [System.Text.UTF8Encoding]::new($true))
+        Write-Utf8File -Path $tempRepoFile -Content $ConflictItem.OriginalDotfilesContent
 
         # 检查 VS Code 是否可用
         $codeExists = Get-Command "code" -ErrorAction SilentlyContinue
@@ -372,33 +296,20 @@ function Invoke-VSCodeDiff {
 }
 #endregion
 
-#region 用户界面函数
-
 # 显示单个文件的处理选项
 function Show-FileProcessOptions {
     param(
         [int]$CurrentIndex, 
-        [int]$TotalCount,
-        [bool]$HasMultipleTargetsToSameSource = $false
+        [int]$TotalCount
     )
     
     Write-Host ""
     Write-Host "    选择操作:" -ForegroundColor Yellow
     Write-Host "    [Enter] VS Code 差异合并 (默认)" -ForegroundColor Cyan
-    Write-Host "    [1] 使用当前配置覆盖 Dotfiles" -ForegroundColor White
-    Write-Host "    [2] 跳过此文件" -ForegroundColor White
-    
-    if ($HasMultipleTargetsToSameSource) {
-        Write-Host "    [A] 全部覆盖 (已禁用 - 检测到同源冲突)" -ForegroundColor DarkGray
-    } else {
-        Write-Host "    [A] 全部覆盖" -ForegroundColor Yellow
-    }
-    
-    Write-Host "    [S] 全部跳过" -ForegroundColor Yellow
+    Write-Host "    [S] 跳过此文件" -ForegroundColor White
+    Write-Host "    [A] 全部跳过" -ForegroundColor Yellow
     Write-Host ""
 }
-
-#endregion
 
 #region 主同步逻辑
 # 处理单个配置链接
@@ -412,14 +323,13 @@ function Process-ConfigLink {
 
     $method = Get-Method -Link $Link
 
-    # 只处理 Copy 和 Transform 方法
     if ($method -ne "Copy" -and $method -ne "Transform") {
-        Write-Host "    ⏩ 跳过SymLink: $($Link.Comment) (自动同步)" -ForegroundColor Cyan
+        Write-Host "    ⏩ 跳过 SymLink: $($Link.Comment) (SymLink 自动同步)" -ForegroundColor Cyan
         $SkippedCount.Value++
         return
     }
 
-    $targetPath = Expand-Path -Path $Link.Target
+    $targetPath = Resolve-ConfigPath -Path $Link.Target -DotfilesDir $script:DotfilesDir
     $sourcePath = Join-Path $script:DotfilesDir $Link.Source
 
     # 检查目标文件是否存在
@@ -439,24 +349,8 @@ function Process-ConfigLink {
     $hasConflict = Test-FileConflict -Link $Link -TargetPath $targetPath -SourcePath $sourcePath -Method $method
 
     if ($hasConflict) {
-        # 检测到冲突
-        if ($script:Force) {
-            # 强制模式：直接同步
-            Write-Host "    - 强制同步: $($Link.Comment)" -ForegroundColor Cyan
-            $conflictItem = New-ConflictItem -Link $Link -Method $method -TargetPath $targetPath -SourcePath $sourcePath
-            if (Sync-SingleFile -ConflictItem $conflictItem) {
-                $SyncedCount.Value++
-            } else {
-                $SkippedCount.Value++
-            }
-        } elseif ($script:Silent) {
-            # 静默模式：跳过冲突
-            Write-Host "    ⏩ 静默模式，跳过冲突: $($Link.Comment)" -ForegroundColor Cyan
-            $SkippedCount.Value++
-        } else {
-            # 交互模式：收集冲突项以供后续处理
-            $ConflictItems.Value += New-ConflictItem -Link $Link -Method $method -TargetPath $targetPath -SourcePath $sourcePath
-        }
+        # 检测到冲突，收集冲突项以供后续交互处理
+        $ConflictItems.Value += New-ConflictItem -Link $Link -Method $method -TargetPath $targetPath -SourcePath $sourcePath
     } else {
         # 没有冲突，报告已同步并跳过
         Write-Host "    ✅ 已同步: $($Link.Comment)" -ForegroundColor Green
@@ -508,7 +402,7 @@ function Process-ConflictResolution {
         [ref]$SkippedCount
     )
 
-    if ($ConflictItems.Count -eq 0 -or $script:Silent) {
+    if ($ConflictItems.Count -eq 0) {
         return
     }
 
@@ -555,14 +449,6 @@ function Process-ConflictsBySourceGroup {
     }
 }
 
-# 检查是否存在多个目标指向同一源文件的情况
-function Test-MultipleTargetsToSameSource {
-    param([array]$ConflictItems)
-    
-    $sourceGroups = $ConflictItems | Group-Object -Property SourcePath
-    return ($sourceGroups | Where-Object { $_.Count -gt 1 }).Count -gt 0
-}
-
 # 处理逐个冲突解决
 function Process-IndividualConflicts {
     param(
@@ -571,10 +457,7 @@ function Process-IndividualConflicts {
         [ref]$SkippedCount
     )
 
-    # 检查是否存在多目标同源的情况
-    $hasMultipleTargetsToSameSource = Test-MultipleTargetsToSameSource -ConflictItems $ConflictItems
-
-    $batchAction = $null  # 用于批量操作: "SyncAll" 或 "SkipAll"
+    $batchAction = $null  # 用于批量操作: "SkipAll"
     
     for ($i = 0; $i -lt $ConflictItems.Count; $i++) {
         $conflictItem = $ConflictItems[$i]
@@ -582,16 +465,7 @@ function Process-IndividualConflicts {
         
         # 如果设置了批量操作，直接执行
         if ($batchAction) {
-            if ($batchAction -eq "SyncAll") {
-                # 重新创建冲突项以获取最新的源文件内容
-                $updatedConflictItem = New-ConflictItem -Link $conflictItem.Link -Method $conflictItem.Method -TargetPath $conflictItem.TargetPath -SourcePath $conflictItem.SourcePath
-                if (Sync-SingleFile -ConflictItem $updatedConflictItem) {
-                    Write-Host "    ✅ 批量覆盖: $($conflictItem.Link.Comment)" -ForegroundColor Green
-                    $SyncedCount.Value++
-                } else {
-                    $SkippedCount.Value++
-                }
-            } elseif ($batchAction -eq "SkipAll") {
+            if ($batchAction -eq "SkipAll") {
                 Write-Host "    ⏩ 批量跳过: $($conflictItem.Link.Comment)" -ForegroundColor Cyan
                 $SkippedCount.Value++
             }
@@ -602,9 +476,9 @@ function Process-IndividualConflicts {
         Write-Host "    📄 处理冲突: $($conflictItem.Link.Comment) ($currentIndex/$($ConflictItems.Count))" -ForegroundColor Yellow
         Write-Host "    $($conflictItem.TargetPath) → $($conflictItem.SourcePath)" -ForegroundColor Gray
         
-        Show-FileProcessOptions -CurrentIndex $currentIndex -TotalCount $ConflictItems.Count -HasMultipleTargetsToSameSource $hasMultipleTargetsToSameSource
+        Show-FileProcessOptions -CurrentIndex $currentIndex -TotalCount $ConflictItems.Count
 
-        Write-Host -NoNewline "    选择 ([Enter]/1/2/A/S) : "
+        Write-Host -NoNewline "    选择 ([Enter]/S/A) : "
         $choice = Read-Host
 
         switch ($choice.ToUpper()) {
@@ -618,42 +492,12 @@ function Process-IndividualConflicts {
                     $SkippedCount.Value++
                 }
             }
-            "1" {
-                # 使用当前配置覆盖
-                # 重新创建冲突项以获取最新的源文件内容
-                $updatedConflictItem = New-ConflictItem -Link $conflictItem.Link -Method $conflictItem.Method -TargetPath $conflictItem.TargetPath -SourcePath $conflictItem.SourcePath
-                if (Sync-SingleFile -ConflictItem $updatedConflictItem) {
-                    $SyncedCount.Value++
-                } else {
-                    $SkippedCount.Value++
-                }
-            }
-            "2" {
+            "S" {
                 # 跳过此文件
                 Write-Host "    ⏩ 跳过: $($conflictItem.Link.Comment)" -ForegroundColor Cyan
                 $SkippedCount.Value++
             }
             "A" {
-                if ($hasMultipleTargetsToSameSource) {
-                    Write-Host "    ❌ 批量覆盖已禁用 - 存在多目标指向同源的情况" -ForegroundColor Red
-                    Write-Host "    💡 请逐个处理或使用批量跳过 (S)" -ForegroundColor Yellow
-                    # 重新处理当前项
-                    $i--
-                    continue
-                }
-                # 剩余全部覆盖
-                Write-Host "    🔄 剩余文件全部覆盖..." -ForegroundColor Cyan
-                $batchAction = "SyncAll"
-                # 重新创建冲突项以获取最新的源文件内容
-                $updatedConflictItem = New-ConflictItem -Link $conflictItem.Link -Method $conflictItem.Method -TargetPath $conflictItem.TargetPath -SourcePath $conflictItem.SourcePath
-                if (Sync-SingleFile -ConflictItem $updatedConflictItem) {
-                    Write-Host "    ✅ 覆盖: $($conflictItem.Link.Comment)" -ForegroundColor Green
-                    $SyncedCount.Value++
-                } else {
-                    $SkippedCount.Value++
-                }
-            }
-            "S" {
                 # 剩余全部跳过
                 Write-Host "    ⏩ 剩余文件全部跳过..." -ForegroundColor Cyan
                 $batchAction = "SkipAll"
