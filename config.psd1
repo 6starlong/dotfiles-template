@@ -51,6 +51,10 @@
         
         # 编辑器配置分层合并规则
         "editor" = @{
+            DefaultField = "author"
+            Platforms = @{
+                "vscode" = "name"      # VSCode 使用 servers 字段
+            }
             # 使用 Layered 字段定义分层合并规则
             Layered = @{
                 "vscode" = @("editors\vscode-settings.json")
@@ -71,6 +75,15 @@
         # }
 
         # ==================== MCP 配置文件 ====================
+        # 测试配置
+        @{
+            Source    = "mcp\servers.json"
+            Target    = "test\mcp.json"
+            Comment   = "VSCode MCP 配置测试"
+            Method    = "Transform"
+            MappingId = "mcp:vscode"
+        }
+        
         # 生产环境配置（取消注释以启用）
         # @{
         #     Source    = "mcp\servers.json"

@@ -32,46 +32,51 @@ try {
     $config = Get-TransformConfig -Format $format
     
     # 检查是否支持分层合并
+    # 优先处理分层合并
     if ($config.Layered -and $config.Layered.$platform) {
-        $mergedConfig = Invoke-LayeredTransform -Config $config -Platform $platform -SourceFile $SourceFile -TargetFile $TargetFile -Overwrite:$Overwrite
-        Write-OutputFile -Content $mergedConfig -TargetFile $TargetFile
-        return
+        $sourceObject = Invoke-LayeredTransform -Config $config -Platform $platform -SourceFile $SourceFile -TargetFile $TargetFile -Overwrite:$Overwrite
+    }
+    # 如果没有分层合并，则正常读取源文件
+    else {
+        if (-not (Test-Path $SourceFile)) {
+            throw "源文件未找到: $SourceFile"
+        }
+        $sourceContent = Get-Content $SourceFile -Raw -Encoding UTF8
+        $sourceObject = ConvertFrom-Jsonc -Content $sourceContent
     }
     
-    # 处理其他类型的转换（如 MCP 配置）
+    # 可选的字段映射转换
     $defaultField = $config.DefaultField
-    
-    # 获取平台特定字段
     $platformField = $config.DefaultField  # 默认值
-    $platformValue = $config.Platforms.$platform
-    if ($platformValue) {
-        $platformField = $platformValue
-    }
-    
-    if (-not $defaultField -or -not $platformField) {
-        throw "无法确定默认字段或平台字段。"
+    if ($config.Platforms -and $config.Platforms.ContainsKey($platform)) {
+        $platformField = $config.Platforms[$platform]
     }
 
-    # 检查并读取源文件
-    if (-not (Test-Path $SourceFile)) {
-        throw "源文件未找到: $SourceFile"
+    # 仅当字段映射有效且需要转换时才执行
+    if ($defaultField -and $platformField -and $defaultField -ne $platformField) {
+        # 确定转换方向的键名
+        $sourceKey, $targetKey = if ($Reverse) {
+            $platformField, $defaultField
+        } else { 
+            $defaultField, $platformField
+        }
+        
+        # 如果源对象包含需要转换的键
+        if ($sourceObject.psobject.Properties.Name -contains $sourceKey) {
+            $dataToTransform = $sourceObject.$sourceKey
+            
+            # 创建新的结果对象，严格按源对象的字段顺序构建
+            $orderedResult = [pscustomobject]@{}
+            foreach ($prop in $sourceObject.psobject.Properties) {
+                if ($prop.Name -eq $sourceKey) {
+                    Add-Member -InputObject $orderedResult -MemberType NoteProperty -Name $targetKey -Value $dataToTransform -Force
+                } else {
+                    Add-Member -InputObject $orderedResult -MemberType NoteProperty -Name $prop.Name -Value $prop.Value -Force
+                }
+            }
+            $sourceObject = $orderedResult
+        }
     }
-    $sourceContent = Get-Content $SourceFile -Raw -Encoding UTF8
-    $sourceObject = ConvertFrom-Jsonc -Content $sourceContent
-
-    # 确定转换方向的键名
-    $sourceKey, $targetKey = if ($Reverse) {
-        $platformField, $defaultField
-    } else { 
-        $defaultField, $platformField
-    }
-    
-    # 验证源文件包含所需的键
-    if (-not $sourceObject.psobject.Properties[$sourceKey]) {
-        # 如果源文件不包含所需字段，静默退出，让冲突检测处理
-        exit 0
-    }
-    $dataToTransform = $sourceObject.$sourceKey
 
     # 准备目标对象（安全处理空文件和无效JSON）
     $resultObject = [pscustomobject]@{}
@@ -90,22 +95,8 @@ try {
         }
     }
 
-    # 创建新的结果对象，严格按源对象的字段顺序构建
-    $orderedResult = [pscustomobject]@{}
-    
-    # 遍历源对象的所有属性，保持原始顺序
-    foreach ($prop in $sourceObject.psobject.Properties) {
-        if ($prop.Name -eq $sourceKey) {
-            # 当前属性是需要转换的字段，添加转换后的键值对
-            Add-Member -InputObject $orderedResult -MemberType NoteProperty -Name $targetKey -Value $dataToTransform
-        } else {
-            # 当前属性是其他字段，原封不动地复制
-            Add-Member -InputObject $orderedResult -MemberType NoteProperty -Name $prop.Name -Value $prop.Value
-        }
-    }
-    
-    # 将有序结果与目标文件中的现有数据进行智能合并
-    $resultObject = Merge-JsonObjects -Base $resultObject -Override $orderedResult
+    # 将最终处理过的对象与目标文件中的现有数据进行智能合并
+    $resultObject = Merge-JsonObjects -Base $resultObject -Override $sourceObject
 
     # 写入最终文件
     Write-OutputFile -Content $resultObject -TargetFile $TargetFile

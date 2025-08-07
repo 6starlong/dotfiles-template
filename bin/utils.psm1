@@ -34,7 +34,7 @@ function Format-JsonClean {
                               -replace '\s*:\s*\{\s*\}', ': {}' `
                               -replace ':\s+\[', ': [' `
                               -replace ':\s+\{', ': {' `
-                              -replace ':\s+(["\d\[\{])', ': $1' `
+                              -replace ':\s+([tfn"\d\[\{])', ': $1' `
                               -replace '(?m)^\s*$\n', ''
     
     # 重新格式化缩进
@@ -456,69 +456,58 @@ function Get-SourceFields {
         [string]$SourceFile
     )
     
-    # 检查是否支持分层合并
-    if ($Config.Layered -and $Config.Layered.$Platform) {
-        $platformConfig = $Config.Layered.$Platform
-        if (-not $platformConfig) {
-            throw "分层配置未找到平台 '$Platform' 的配置层定义"
-        }
-        
-        # 收集所有配置层的字段
-        $allSourceFields = @()
-        
-        # 添加基础配置文件的字段
-        if (Test-Path $SourceFile) {
-            $sourceContent = Get-Content $SourceFile -Raw -Encoding UTF8
-            $sourceObject = ConvertFrom-Jsonc -Content $sourceContent
-            $allSourceFields += $sourceObject.psobject.Properties.Name
-        }
-        
-        # 添加各层配置文件的字段
-        $dotfilesDir = Split-Path $PSScriptRoot -Parent
-        foreach ($layerPath in $platformConfig) {
-            $fullLayerPath = Join-Path $dotfilesDir $layerPath
-            if (Test-Path $fullLayerPath) {
-                $layerContent = Get-Content $fullLayerPath -Raw -Encoding UTF8
-                $layerObject = ConvertFrom-Jsonc -Content $layerContent
-                $allSourceFields += $layerObject.psobject.Properties.Name
-            }
-        }
-        return $allSourceFields | Select-Object -Unique
-    } else {
-        # 传统的字段映射处理 - 返回源文件中所有字段的目标映射
-        $defaultField = $Config.DefaultField
-        $platformField = if ($Config.Platforms.ContainsKey($Platform)) {
-            $Config.Platforms[$Platform]
-        } else {
-            $Config.DefaultField
-        }
+    # 步骤 1: 收集所有源文件的字段名
+    $allSourceFields = @()
 
-        if (-not $defaultField -or -not $platformField) {
-            throw "无法确定默认字段或平台字段。"
-        }
-
-        # 读取源文件，获取所有字段
-        if (-not (Test-Path $SourceFile)) {
-            throw "源文件未找到: $SourceFile"
-        }
-        
+    # 添加基础配置文件的字段
+    if (Test-Path $SourceFile) {
         $sourceContent = Get-Content $SourceFile -Raw -Encoding UTF8
         $sourceObject = ConvertFrom-Jsonc -Content $sourceContent
-        $allTargetFields = @()
-        
-        # 遍历源文件中的所有字段，确定它们在目标文件中的字段名
-        foreach ($sourceFieldName in $sourceObject.psobject.Properties.Name) {
-            if ($sourceFieldName -eq $defaultField) {
-                # 默认字段需要转换为平台特定字段
-                $allTargetFields += $platformField
-            } else {
-                # 其他字段保持原名
-                $allTargetFields += $sourceFieldName
+        $allSourceFields += $sourceObject.psobject.Properties.Name
+    }
+
+    # 如果是分层模式，添加所有层的字段
+    if ($Config.Layered -and $Config.Layered.$Platform) {
+        $platformConfig = $Config.Layered.$Platform
+        if ($platformConfig) {
+            $dotfilesDir = Split-Path $PSScriptRoot -Parent
+            foreach ($layerPath in $platformConfig) {
+                $fullLayerPath = Join-Path $dotfilesDir $layerPath
+                if (Test-Path $fullLayerPath) {
+                    $layerContent = Get-Content $fullLayerPath -Raw -Encoding UTF8
+                    $layerObject = ConvertFrom-Jsonc -Content $layerContent
+                    $allSourceFields += $layerObject.psobject.Properties.Name
+                }
             }
         }
-        
-        return $allTargetFields | Select-Object -Unique
     }
+
+    # 步骤 2: 对收集到的所有字段应用字段映射规则
+    $defaultField = $Config.DefaultField
+    $platformField = if ($Config.Platforms -and $Config.Platforms.ContainsKey($Platform)) {
+        $Config.Platforms[$Platform]
+    } else {
+        $Config.DefaultField
+    }
+    
+    # 如果没有定义有效的映射规则，直接返回源字段
+    if (-not $defaultField -or -not $platformField -or $defaultField -eq $platformField) {
+        return $allSourceFields | Select-Object -Unique
+    }
+
+    # 步骤 3: 遍历所有源字段，生成最终的目标字段列表
+    $allTargetFields = @()
+    foreach ($sourceFieldName in $allSourceFields) {
+        if ($sourceFieldName -eq $defaultField) {
+            # 如果字段匹配，则替换为平台特定字段
+            $allTargetFields += $platformField
+        } else {
+            # 其他字段保持原名
+            $allTargetFields += $sourceFieldName
+        }
+    }
+    
+    return $allTargetFields | Select-Object -Unique
 }
 
 # ==================== 模块导出 ====================
