@@ -19,40 +19,6 @@ $ErrorActionPreference = 'Stop'
 # 引入共享函数
 Import-Module (Join-Path $PSScriptRoot "utils.psm1")
 
-# 智能合并对象，保持原有结构
-function Merge-Objects {
-    param ($Destination, $Source)
-    
-    # 确保参数不为null
-    if (-not $Destination) { $Destination = [pscustomobject]@{} }
-    if (-not $Source) { return $Destination }
-    
-    foreach ($prop in $Source.psobject.Properties) {
-        $key = $prop.Name
-        $sourceValue = $prop.Value
-        $destinationProperty = $Destination.psobject.Properties[$key]
-        
-        # 如果目标已存在此键且都是复杂对象，递归合并
-        if ($destinationProperty -and 
-            $destinationProperty.Value -is [psobject] -and 
-            $sourceValue -is [psobject] -and
-            $destinationProperty.Value.GetType().Name -eq 'PSCustomObject' -and
-            $sourceValue.GetType().Name -eq 'PSCustomObject') {
-            Merge-Objects -Destination $destinationProperty.Value -Source $sourceValue
-        }
-        else {
-            # 直接替换或添加新属性
-            if ($destinationProperty) { 
-                $destinationProperty.Value = $sourceValue 
-            }
-            else { 
-                Add-Member -InputObject $Destination -MemberType NoteProperty -Name $key -Value $sourceValue 
-            }
-        }
-    }
-    return $Destination
-}
-
 try {
     # 解析转换类型参数
     $parts = $TransformType -split ":"
@@ -139,11 +105,7 @@ try {
     }
     
     # 将有序结果与目标文件中的现有数据进行智能合并
-    $resultObject = Merge-Objects -Destination $resultObject -Source $orderedResult
-
-    # 生成最终JSON（统一使用ConvertTo-Json确保格式一致性）
-    $rawJson = $resultObject | ConvertTo-Json -Depth 100 -Compress:$false
-    $finalJson = Format-JsonClean -JsonString $rawJson -Indent 2
+    $resultObject = Merge-JsonObjects -Base $resultObject -Override $orderedResult
 
     # 写入最终文件
     Write-OutputFile -Content $resultObject -TargetFile $TargetFile

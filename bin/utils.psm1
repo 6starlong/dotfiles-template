@@ -185,44 +185,44 @@ function Restore-UnicodeCharacters {
     
     # 常见的Unicode转义字符映射（只处理常见的可打印ASCII字符）
     $unicodeReplacements = @{
-        '\u0027' = "'"      # 单引号
-        '\u0026' = '&'      # &符号
-        '\u003c' = '<'      # 小于号
-        '\u003e' = '>'      # 大于号
-        '\u002f' = '/'      # 斜杠
-        '\u005c' = '\'      # 反斜杠
-        '\u0022' = '"'      # 双引号
-        '\u0020' = ' '      # 空格
-        '\u0021' = '!'      # 感叹号
-        '\u0023' = '#'      # 井号
-        '\u0024' = '$'      # 美元符号
-        '\u0025' = '%'      # 百分号
-        '\u0028' = '('      # 左括号
-        '\u0029' = ')'      # 右括号
-        '\u002a' = '*'      # 星号
-        '\u002b' = '+'      # 加号
-        '\u002c' = ','      # 逗号
-        '\u002d' = '-'      # 减号
-        '\u002e' = '.'      # 句号
-        '\u003a' = ':'      # 冒号
-        '\u003b' = ';'      # 分号
-        '\u003d' = '='      # 等号
-        '\u003f' = '?'      # 问号
-        '\u0040' = '@'      # @符号
-        '\u005b' = '['      # 左方括号
-        '\u005d' = ']'      # 右方括号
-        '\u005e' = '^'      # 脱字符
-        '\u005f' = '_'      # 下划线
-        '\u0060' = '`'      # 反引号
-        '\u007b' = '{'      # 左大括号
-        '\u007c' = '|'      # 竖线
-        '\u007d' = '}'      # 右大括号
-        '\u007e' = '~'      # 波浪号
+        '\\u0027' = "'"      # 单引号
+        '\\u0026' = '&'      # &符号
+        '\\u003c' = '<'      # 小于号
+        '\\u003e' = '>'      # 大于号
+        '\\u002f' = '/'      # 斜杠
+        '\\u005c' = '\'      # 反斜杠
+        '\\u0022' = '"'      # 双引号
+        '\\u0020' = ' '      # 空格
+        '\\u0021' = '!'      # 感叹号
+        '\\u0023' = '#'      # 井号
+        '\\u0024' = '$'      # 美元符号
+        '\\u0025' = '%'      # 百分号
+        '\\u0028' = '('      # 左括号
+        '\\u0029' = ')'      # 右括号
+        '\\u002a' = '*'      # 星号
+        '\\u002b' = '+'      # 加号
+        '\\u002c' = ','      # 逗号
+        '\\u002d' = '-'      # 减号
+        '\\u002e' = '.'      # 句号
+        '\\u003a' = ':'      # 冒号
+        '\\u003b' = ';'      # 分号
+        '\\u003d' = '='      # 等号
+        '\\u003f' = '?'      # 问号
+        '\\u0040' = '@'      # @符号
+        '\\u005b' = '['      # 左方括号
+        '\\u005d' = ']'      # 右方括号
+        '\\u005e' = '^'      # 脱字符
+        '\\u005f' = '_'      # 下划线
+        '\\u0060' = '`'      # 反引号
+        '\\u007b' = '{'      # 左大括号
+        '\\u007c' = '|'      # 竖线
+        '\\u007d' = '}'      # 右大括号
+        '\\u007e' = '~'      # 波浪号
     }
     
     $result = $JsonString
     
-    # 处理Unicode转义字符（注意JSON中的反斜杠不需要额外转义）
+    # 处理Unicode转义字符
     foreach ($unicode in $unicodeReplacements.Keys) {
         $result = $result -replace $unicode, $unicodeReplacements[$unicode]
     }
@@ -485,25 +485,39 @@ function Get-SourceFields {
         }
         return $allSourceFields | Select-Object -Unique
     } else {
-        # 传统的字段映射处理
-        $defaultField = $Config.defaultField
-        $platformField = if ($Config.platforms.psobject.Properties[$Platform]) {
-            $Config.platforms.$Platform 
+        # 传统的字段映射处理 - 返回源文件中所有字段的目标映射
+        $defaultField = $Config.DefaultField
+        $platformField = if ($Config.Platforms.ContainsKey($Platform)) {
+            $Config.Platforms[$Platform]
         } else {
-            $Config.defaultField
+            $Config.DefaultField
         }
 
         if (-not $defaultField -or -not $platformField) {
             throw "无法确定默认字段或平台字段。"
         }
 
-        # 读取源文件，获取所有源文件的字段名
+        # 读取源文件，获取所有字段
         if (-not (Test-Path $SourceFile)) {
             throw "源文件未找到: $SourceFile"
         }
+        
         $sourceContent = Get-Content $SourceFile -Raw -Encoding UTF8
         $sourceObject = ConvertFrom-Jsonc -Content $sourceContent
-        return $sourceObject.psobject.Properties.Name
+        $allTargetFields = @()
+        
+        # 遍历源文件中的所有字段，确定它们在目标文件中的字段名
+        foreach ($sourceFieldName in $sourceObject.psobject.Properties.Name) {
+            if ($sourceFieldName -eq $defaultField) {
+                # 默认字段需要转换为平台特定字段
+                $allTargetFields += $platformField
+            } else {
+                # 其他字段保持原名
+                $allTargetFields += $sourceFieldName
+            }
+        }
+        
+        return $allTargetFields | Select-Object -Unique
     }
 }
 

@@ -65,6 +65,7 @@ function Remove-JsonField {
 
         # 如果没有移除任何字段，说明文件中不包含 dotfiles 管理的内容
         if ($fieldsRemoved.Count -eq 0) {
+            write-host "    " -NoNewline
             Write-Warning "文件中未找到 dotfiles 管理的字段: $FilePath"
             return $false
         }
@@ -137,7 +138,7 @@ try {
                         $removedCount++
                     }
                 } else {
-                    Write-Host "    ⏩ 跳过 ($($link.Comment)): 未找到管理的字段" -ForegroundColor Cyan
+                    Write-Host "    ⏩ 跳过 ($($link.Comment))" -ForegroundColor Cyan
                     $skippedCount++
                 }
             } else {
