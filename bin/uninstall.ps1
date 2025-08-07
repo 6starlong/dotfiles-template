@@ -26,26 +26,11 @@ function Remove-JsonField {
         $format = $parts[0]
         $platform = $parts[1]
 
-        # 获取配置并确定字段映射
+        # 获取配置
         $config = Get-TransformConfig -Format $format
-        $defaultField = $config.defaultField
-        $platformField = if ($config.platforms.psobject.Properties[$platform]) {
-            $config.platforms.$platform 
-        } else {
-            $config.defaultField
-        }
-
-        if (-not $defaultField -or -not $platformField) {
-            throw "无法确定默认字段或平台字段。"
-        }
-
-        # 读取源文件，获取所有源文件的字段名
-        if (-not (Test-Path $SourceFile)) {
-            throw "源文件未找到: $SourceFile"
-        }
-        $sourceContent = Get-Content $SourceFile -Raw -Encoding UTF8
-        $sourceObject = ConvertFrom-Jsonc -Content $sourceContent
-        $sourceFields = $sourceObject.psobject.Properties.Name
+        
+        # 获取源文件字段列表
+        $sourceFields = Get-SourceFields -Config $config -Platform $platform -SourceFile $SourceFile
 
         # 读取目标文件
         if (-not (Test-Path $FilePath)) {
@@ -76,12 +61,6 @@ function Remove-JsonField {
                 $jsonObject.psobject.Properties.Remove($sourceField)
                 $fieldsRemoved += $sourceField
             }
-        }
-        
-        # 如果平台字段与源文件字段不同，也需要移除平台字段
-        if ($platformField -notin $sourceFields -and $jsonObject.psobject.Properties[$platformField]) {
-            $jsonObject.psobject.Properties.Remove($platformField)
-            $fieldsRemoved += $platformField
         }
 
         # 如果没有移除任何字段，说明文件中不包含 dotfiles 管理的内容
@@ -135,7 +114,7 @@ try {
 
     # 处理配置移除
     foreach ($link in $config.Links) {
-        $targetPath = $link.Target -replace '\{USERPROFILE\}', $env:USERPROFILE
+        $targetPath = Resolve-ConfigPath -Path $link.Target -DotfilesDir $dotfilesDir
         $method = if ($link.Method) { $link.Method } else { $config.DefaultMethod }
 
         if (-not (Test-Path $targetPath)) {

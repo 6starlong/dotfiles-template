@@ -48,6 +48,15 @@
                 "vscode" = "servers"      # VSCode 使用 servers 字段
             }
         }
+        
+        # 编辑器配置分层合并规则
+        "editor" = @{
+            # 使用 Layered 字段定义分层合并规则
+            Layered = @{
+                "vscode" = @("editors\vscode-settings.json")
+                "cursor" = @("editors\cursor-settings.json")
+            }
+        }
     }
 
     # 配置链接 - 定义源文件到目标位置的映射关系
@@ -61,55 +70,47 @@
         #     MappingId = "type:platform"                     # 转换映射ID
         # }
 
-
-        # ==================== 测试配置 ====================
-        @{
-            Source  = "test\demo.txt"
-            Target  = "D:\Projects\dotfiles\test\demo1.txt"
-            Comment = "测试配置 1"
-            Method  = "Copy"
-        }
-
-        @{
-            Source  = "test\demo.txt"
-            Target  = "D:\Projects\dotfiles\test\demo2.txt"
-            Comment = "测试配置 2"
-            Method  = "Copy"
-        }
-
         # ==================== MCP 配置文件 ====================
-        # 测试环境配置
-        @{
-            Source    = "mcp\base.json"
-            Target    = "D:\Projects\dotfiles\test\demo.json"
-            Comment   = "MCP 演示配置"
-            Method    = "Transform"
-            MappingId = "mcp:demo"
-        }
-
-        @{
-            Source    = "mcp\base.json"
-            Target    = "D:\Projects\dotfiles\test\vscode-mcp.json"
-            Comment   = "MCP VSCode 测试配置"
-            Method    = "Transform"
-            MappingId = "mcp:vscode"
-        }
-
         # 生产环境配置（取消注释以启用）
         # @{
-        #     Source    = "mcp\base.json"
+        #     Source    = "mcp\servers.json"
         #     Target    = "{USERPROFILE}\AppData\Roaming\Code\User\mcp.json"
         #     Comment   = "VSCode MCP 配置"
         #     Method    = "Transform"
         #     MappingId = "mcp:vscode"
         # }
-
         # @{
-        #     Source    = "mcp\base.json"
+        #     Source    = "mcp\servers.json"
         #     Target    = "{USERPROFILE}\.cursor\mcp.json"
         #     Comment   = "Cursor MCP 配置"
         #     Method    = "Transform"
         #     MappingId = "mcp:cursor"
+        # }
+
+        # ==================== 编辑器配置文件 ====================
+        # 测试配置
+        @{
+            Source    = "editors\base-settings.json"
+            Target    = "test\mixed-config.json"
+            Comment   = "VSCode 分层配置测试"
+            Method    = "Transform"
+            MappingId = "editor:vscode"
+        }
+
+        # 生产环境配置（取消注释以启用）
+        # @{
+        #     Source    = "editors\base-settings.json"
+        #     Target    = "{USERPROFILE}\AppData\Roaming\Code\User\settings.json"
+        #     Comment   = "VSCode 分层配置"
+        #     Method    = "Transform"
+        #     MappingId = "editor:vscode"
+        # }
+        # @{
+        #     Source    = "editors\base-settings.json"
+        #     Target    = "{USERPROFILE}\AppData\Roaming\Cursor\User\settings.json"
+        #     Comment   = "Cursor 分层配置"
+        #     Method    = "Transform"
+        #     MappingId = "editor:cursor"
         # }
     )
 }

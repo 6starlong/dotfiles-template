@@ -42,7 +42,7 @@ function Get-ConfigData {
 # 展开路径变量
 function Expand-Path {
     param([string]$Path)
-    return $Path -replace '\{USERPROFILE\}', $env:USERPROFILE
+    return Resolve-ConfigPath -Path $Path -DotfilesDir $script:DotfilesDir
 }
 
 # 获取部署方法

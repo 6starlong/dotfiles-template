@@ -3,6 +3,9 @@
 
 $dotfilesDir = Split-Path $PSScriptRoot -Parent
 
+# 导入工具模块
+Import-Module (Join-Path $PSScriptRoot "utils.psm1") -Force
+
 # 加载配置文件和共享函数
 Import-Module (Join-Path $PSScriptRoot "utils.psm1")
 $configFile = Join-Path $dotfilesDir "config.psd1"
@@ -23,7 +26,7 @@ $maxCommentLength = ($config.Links | ForEach-Object { $_.Comment.Length } | Meas
 $commentPadding = [Math]::Max($maxCommentLength + 2, 35)  # 至少35个字符，或者最长名称+2
 
 foreach ($link in $config.Links) {
-    $targetPath = $link.Target -replace '\{USERPROFILE\}', $env:USERPROFILE
+    $targetPath = Resolve-ConfigPath -Path $link.Target -DotfilesDir $dotfilesDir
     
     # 构建源文件路径
     $sourcePath = Join-Path $dotfilesDir $link.Source

@@ -9,7 +9,8 @@ param(
     [string]$TargetFile,
     [Parameter(Mandatory = $true)]
     [string]$TransformType,
-    [switch]$Reverse
+    [switch]$Reverse,
+    [switch]$Overwrite
 )
 
 $TransformType = $TransformType.Trim("'", '"')
@@ -61,8 +62,17 @@ try {
     $format = $parts[0]
     $platform = $parts[1]
 
-    # 获取配置并确定字段映射
+    # 获取配置
     $config = Get-TransformConfig -Format $format
+    
+    # 检查是否支持分层合并
+    if ($config.Layered -and $config.Layered.$platform) {
+        $mergedConfig = Invoke-LayeredTransform -Config $config -Platform $platform -SourceFile $SourceFile -TargetFile $TargetFile -Overwrite:$Overwrite
+        Write-OutputFile -Content $mergedConfig -TargetFile $TargetFile
+        return
+    }
+    
+    # 处理其他类型的转换（如 MCP 配置）
     $defaultField = $config.DefaultField
     
     # 获取平台特定字段
@@ -135,12 +145,8 @@ try {
     $rawJson = $resultObject | ConvertTo-Json -Depth 100 -Compress:$false
     $finalJson = Format-JsonClean -JsonString $rawJson -Indent 2
 
-    # 确保输出目录存在并写入文件
-    $outputDir = Split-Path $TargetFile -Parent
-    if ($outputDir -and -not (Test-Path $outputDir)) {
-        New-Item -Path $outputDir -ItemType Directory -Force | Out-Null
-    }
-        [System.IO.File]::WriteAllText($TargetFile, ($finalJson + [System.Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
+    # 写入最终文件
+    Write-OutputFile -Content $resultObject -TargetFile $TargetFile
 
 }
 catch {

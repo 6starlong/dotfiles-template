@@ -9,6 +9,9 @@ param(
 
 $dotfilesDir = Split-Path $PSScriptRoot -Parent
 
+# 导入工具模块
+Import-Module (Join-Path $PSScriptRoot "utils.psm1") -Force
+
 # 加载配置文件
 $configFile = Join-Path $dotfilesDir "config.psd1"
 if (-not (Test-Path $configFile)) {
@@ -45,7 +48,7 @@ function Create-Backup {
     # 先检查是否有文件需要备份
     $filesToBackup = @()
     foreach ($link in $config.Links) {
-        $targetPath = $link.Target -replace '\{USERPROFILE\}', $env:USERPROFILE
+        $targetPath = Resolve-ConfigPath -Path $link.Target -DotfilesDir $dotfilesDir
         if (Test-Path $targetPath) {
             $filesToBackup += @{
                 Link = $link
@@ -198,7 +201,7 @@ function Restore-FromBackup {
         $backupFilePath = Join-Path $selectedBackup.FullName $link.Source
 
         if (Test-Path $backupFilePath) {
-            $targetPath = $link.Target -replace '\{USERPROFILE\}', $env:USERPROFILE
+            $targetPath = Resolve-ConfigPath -Path $link.Target -DotfilesDir $dotfilesDir
 
             # 确保目标目录存在
             $targetDir = Split-Path $targetPath -Parent

@@ -153,7 +153,7 @@ $failureCount = 0
 
 foreach ($link in $config.Links) {
     $sourcePath = Join-Path $dotfilesDir $link.Source
-    $targetPath = $link.Target -replace '\{USERPROFILE\}', $env:USERPROFILE
+    $targetPath = Resolve-ConfigPath -Path $link.Target -DotfilesDir $dotfilesDir
 
     if (-not (Test-Path $sourcePath)) {
         Write-InstallResult "⚠️ 跳过: 源文件未找到 '$sourcePath'" "Yellow"
@@ -231,7 +231,7 @@ if ($failureCount -eq 0) {
 } elseif ($successCount -gt 0) {
     Write-InstallResult "⚠️ Dotfiles 安装部分完成（$successCount 成功，$failureCount 失败）" "Yellow"
 } else {
-    Write-InstallResult "❌ Dotfiles 安装失败！" "Red"
+    return Write-InstallResult "❌ Dotfiles 安装失败！" "Red"
 }
 Write-InstallResult "📊 处理了 $($successCount + $failureCount) 个配置项" "Green"
 Write-host ""
