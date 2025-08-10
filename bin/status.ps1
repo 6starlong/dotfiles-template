@@ -83,6 +83,48 @@ function Get-ConfigStatus {
     }
 }
 
+# 计算字符串显示宽度（中文字符占2个位置）
+function Get-DisplayWidth {
+    param([string]$Text)
+    $width = 0
+    foreach ($char in $Text.ToCharArray()) {
+        if ([int]$char -gt 127) { $width += 2 } else { $width += 1 }
+    }
+    return $width
+}
+
+# 格式化状态行
+function Format-StatusLine {
+    param(
+        [hashtable]$Status,
+        [hashtable]$Link,
+        [string]$Method
+    )
+    
+    $fixedWidth = 32
+    $comment = $Link.Comment
+    $width = Get-DisplayWidth $comment
+    
+    # 截断过长的注释
+    if ($width -gt $fixedWidth) {
+        $truncated = ""
+        $currentWidth = 0
+        foreach ($char in $comment.ToCharArray()) {
+            $charWidth = if ([int]$char -gt 127) { 2 } else { 1 }
+            if ($currentWidth + $charWidth + 3 -le $fixedWidth) {
+                $truncated += $char
+                $currentWidth += $charWidth
+            } else { break }
+        }
+        $comment = $truncated + "..."
+        $width = Get-DisplayWidth $comment
+    }
+    
+    # 对齐到固定位置
+    $padding = " " * ($fixedWidth - $width + 4)
+    return "$($Status.Icon) $comment$padding[$Method]  $($Status.Message)"
+}
+
 # 显示状态报告
 function Show-StatusReport {
     Write-Host ""
@@ -91,25 +133,20 @@ function Show-StatusReport {
     Write-Host "    ================================================================" -ForegroundColor Green
     Write-Host ""
 
-    # 计算最长的配置名称长度，用于动态对齐
-    $maxCommentLength = ($script:Config.Links | ForEach-Object { $_.Comment.Length } | Measure-Object -Maximum).Maximum
-    $commentPadding = [Math]::Max($maxCommentLength + 2, 35)
-
     $statusCounts = @{
         Synced = 0
         NotDeployed = 0
         OutOfSync = 0
         Error = 0
     }
-
+    
     foreach ($link in $script:Config.Links) {
         $status = Get-ConfigStatus -Link $link
         $method = Get-Method -Link $link
         
-        $configName = $link.Comment.PadRight($commentPadding)
-        $methodTag = "[$method]".PadRight(13)
-        
-        Write-Host "    $($status.Icon) $configName $methodTag $($status.Message)" -ForegroundColor $status.Color
+        # 使用格式化函数生成状态行
+        $line = Format-StatusLine -Status $status -Link $link -Method $method
+        Write-Host "    $line" -ForegroundColor $status.Color
         
         # 统计状态
         switch ($status.Status) {

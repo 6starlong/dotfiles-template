@@ -242,11 +242,9 @@ function Get-TransformTasks {
             return @()
         }
         
-        # 查找匹配的 Link 配置
+        # 优先查找带 Transform 标识的 Link 配置
         $matchingLinks = $script:Config.Links | Where-Object {
-            $_.Method -eq "Copy" -and 
-            [System.IO.Path]::GetFileNameWithoutExtension((Split-Path $_.Source -Leaf)) -eq $platform -and 
-            $_.Source -like "*\$configType\*" 
+            $_.Method -eq "Copy" -and $_.Transform -eq $FilterType
         }
         
         if ($matchingLinks) {
@@ -259,7 +257,7 @@ function Get-TransformTasks {
                 }
             }
         } else {
-            # 创建默认输出路径（不使用 dist 前缀）
+            # 使用默认路径格式：configType\platform.json
             $tasks += @{
                 SourceFile = $setting.SourceFile
                 TargetFile = "$configType\$platform.json"
@@ -271,29 +269,23 @@ function Get-TransformTasks {
         # 遍历所有 Copy 方法的 Links
         foreach ($link in $script:Config.Links) {
             if ($link.Method -eq "Copy") {
-                $fileBaseName = [System.IO.Path]::GetFileNameWithoutExtension((Split-Path $link.Source -Leaf))
-                
-                foreach ($configType in $script:Config.TransformSettings.Keys) {
-                    $setting = $script:Config.TransformSettings[$configType]
-                    
-                    # 检查平台支持
-                    $platformSupported = $false
-                    if ($setting.Layered -and $setting.Layered.ContainsKey($fileBaseName)) {
-                        $platformSupported = $true
-                    } elseif ($setting.Platforms -and $setting.Platforms.ContainsKey($fileBaseName)) {
-                        $platformSupported = $true
-                    } elseif (-not $setting.Layered -and -not $setting.Platforms) {
-                        $platformSupported = $true
-                    }
-                    
-                    if ($platformSupported -and (-not $FilterType -or $configType -eq $FilterType)) {
-                        $tasks += @{
-                            SourceFile = $setting.SourceFile
-                            TargetFile = $link.Source
-                            TransformType = "$configType`:$fileBaseName"
-                            Comment = $link.Comment
+                # 优先使用 Transform 字段
+                if ($link.Transform) {
+                    $transformParts = $link.Transform -split ":"
+                    if ($transformParts.Length -eq 2) {
+                        $configType = $transformParts[0]
+                        $platform = $transformParts[1]
+                        
+                        if ($script:Config.TransformSettings.ContainsKey($configType) -and 
+                            (-not $FilterType -or $configType -eq $FilterType)) {
+                            $setting = $script:Config.TransformSettings[$configType]
+                            $tasks += @{
+                                SourceFile = $setting.SourceFile
+                                TargetFile = $link.Source
+                                TransformType = $link.Transform
+                                Comment = $link.Comment
+                            }
                         }
-                        break
                     }
                 }
             }

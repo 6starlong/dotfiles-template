@@ -71,12 +71,14 @@
             Target    = "test\vscode\mcp.json"
             Comment   = "VSCode MCP 配置"
             Method    = "Copy"
+            Transform = "mcp:vscode"
         }
         @{
             Source    = "mcp\cursor\mcp.json"
             Target    = "test\cursor\mcp.json"
             Comment   = "Cursor MCP 配置"
             Method    = "Copy"
+            Transform = "mcp:cursor"
         }
 
         # ==================== 编辑器配置文件 ====================
@@ -85,12 +87,14 @@
             Target    = "test\vscode\settings.json"
             Comment   = "VSCode 完整配置"
             Method    = "Copy"
+            Transform = "editor:vscode"
         }
         @{
             Source    = "editors\cursor\settings.json"
             Target    = "test\cursor\settings.json"
             Comment   = "Cursor 完整配置"
             Method    = "Copy"
+            Transform = "editor:cursor"
         }
     )
 }
