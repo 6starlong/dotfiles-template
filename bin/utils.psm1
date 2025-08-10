@@ -425,7 +425,10 @@ function Get-LayeredConfig {
         [string]$BaseConfigPath,
         
         [Parameter()]
-        [array]$Layers = @()
+        [array]$Layers = @(),
+        
+        [Parameter()]
+        [ref]$TransformConfig
     )
     
     # 1. 从基础配置开始
@@ -438,17 +441,33 @@ function Get-LayeredConfig {
         $mergedConfig = [psobject]@{}
     }
     
+    # 初始化排除字段收集器
+    $excludeFields = @()
+    
     # 2. 按顺序合并额外配置层
     foreach ($layerPath in $Layers) {
         $fullPath = Join-Path $script:DotfilesDir $layerPath
         
         if (Test-Path $fullPath) {
             $layerConfig = Read-JsonConfig -Path $fullPath
+            
+            # 提取并收集排除字段
+            if ($layerConfig.'$excludeFields') {
+                $excludeFields += $layerConfig.'$excludeFields'
+                $layerConfig.PSObject.Properties.Remove('$excludeFields')
+                Write-Verbose "收集到排除字段: $($layerConfig.'$excludeFields' -join ', ')"
+            }
+            
             $mergedConfig = Merge-JsonObjects -Base $mergedConfig -Override $layerConfig
             Write-Verbose "已合并额外配置层: $fullPath"
         } else {
             Write-Verbose "额外配置层不存在，跳过: $fullPath"
         }
+    }
+    
+    # 返回收集到的排除字段
+    if ($TransformConfig) {
+        $TransformConfig.Value = $excludeFields | Select-Object -Unique
     }
     
     return $mergedConfig
@@ -481,8 +500,9 @@ function Invoke-LayeredTransform {
     # 计算相对路径
     $baseConfigRelPath = Resolve-ConfigPath -Path $SourceFile -DotfilesDir (Split-Path $PSScriptRoot -Parent) -ToRelative
     
-    # 获取分层合并配置
-    $mergedConfig = Get-LayeredConfig -BaseConfigPath $baseConfigRelPath -Layers $platformConfig
+    # 获取分层合并配置，同时收集排除字段
+    $excludeFields = $null
+    $mergedConfig = Get-LayeredConfig -BaseConfigPath $baseConfigRelPath -Layers $platformConfig -TransformConfig ([ref]$excludeFields)
     
     # 如果不是强制覆盖模式，合并现有用户配置
     if (-not $Overwrite -and (Test-Path $TargetFile)) {
@@ -492,10 +512,78 @@ function Invoke-LayeredTransform {
         }
     }
     
+    # 应用排除字段
+    if ($excludeFields -and $excludeFields.Count -gt 0) {
+        Write-Verbose "应用排除字段: $($excludeFields -join ', ')"
+        $mergedConfig = Remove-ExcludedFields -Config $mergedConfig -ExcludeFields $excludeFields
+    }
+    
     return $mergedConfig
 }
 
 # ==================== 配置移除函数 ====================
+
+# 递归删除空文件夹（从指定文件路径开始向上清理）
+function Remove-EmptyDirectories {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$FilePath
+    )
+    
+    $parentDir = Split-Path $FilePath -Parent
+    
+    # 递归向上清理空目录，直到遇到非空目录或到达根目录
+    while ($parentDir -and (Test-Path $parentDir)) {
+        try {
+            # 检查目录是否为空
+            $items = Get-ChildItem $parentDir -Force -ErrorAction SilentlyContinue
+            if ($items.Count -eq 0) {
+                Write-Verbose "删除空目录: $parentDir"
+                Remove-Item $parentDir -Force -ErrorAction Stop
+                $parentDir = Split-Path $parentDir -Parent
+            } else {
+                # 目录不为空，停止清理
+                break
+            }
+        } catch {
+            # 无法删除目录（可能是权限问题或系统目录），停止清理
+            Write-Verbose "无法删除目录 $parentDir : $($_.Exception.Message)"
+            break
+        }
+    }
+}
+
+# 从配置对象中移除排除的字段
+function Remove-ExcludedFields {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [psobject]$Config,
+        
+        [Parameter(Mandatory)]
+        [array]$ExcludeFields
+    )
+    
+    if (-not $ExcludeFields -or $ExcludeFields.Count -eq 0) {
+        return $Config
+    }
+    
+    # 创建新的配置对象
+    $result = [pscustomobject]@{}
+    
+    # 复制所有不在排除列表中的属性
+    foreach ($property in $Config.PSObject.Properties) {
+        if ($property.MemberType -eq 'NoteProperty') {
+            if ($ExcludeFields -contains $property.Name) {
+                Write-Verbose "排除字段: $($property.Name)"
+            } else {
+                $result | Add-Member -MemberType NoteProperty -Name $property.Name -Value $property.Value
+            }
+        }
+    }
+    return $result
+}
 
 # 获取源文件字段列表（用于卸载）
 function Get-SourceFields {
@@ -626,6 +714,10 @@ function Remove-ConfigFields {
             # 如果对象为空，直接删除文件
             Remove-Item -Path $TargetFile -Force
             Write-Verbose "对象为空，已删除文件: $TargetFile"
+            
+            # 检查并删除空文件夹
+            Remove-EmptyDirectories -FilePath $TargetFile
+            
             Write-Verbose "成功移除 $($removedFields.Count) 个字段: $($removedFields -join ', ')"
         } else {
             # 写回文件

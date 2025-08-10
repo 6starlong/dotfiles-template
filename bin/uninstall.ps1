@@ -10,30 +10,6 @@ $script:Config = Get-DotfilesConfig
 #endregion
 
 #region 主卸载逻辑
-# 清理空的父目录
-function Remove-EmptyDirectories {
-    param([string]$FilePath)
-    
-    $parentDir = Split-Path $FilePath -Parent
-    
-    # 递归向上清理空目录，直到遇到非空目录或到达根目录
-    while ($parentDir -and (Test-Path $parentDir)) {
-        try {
-            # 检查目录是否为空
-            $items = Get-ChildItem $parentDir -Force -ErrorAction SilentlyContinue
-            if ($items.Count -eq 0) {
-                Remove-Item $parentDir -Force -ErrorAction Stop
-                $parentDir = Split-Path $parentDir -Parent
-            } else {
-                # 目录不为空，停止清理
-                break
-            }
-        } catch {
-            # 无法删除目录（可能是权限问题或系统目录），停止清理
-            break
-        }
-    }
-}
 
 # 处理单个配置链接的卸载
 function Process-ConfigUninstall {
