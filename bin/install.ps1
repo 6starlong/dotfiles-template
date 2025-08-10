@@ -7,7 +7,8 @@ param(
     [switch]$Overwrite
 )
 
-$dotfilesDir = Split-Path $PSScriptRoot -Parent
+$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
+Import-Module (Join-Path $PSScriptRoot "utils.psm1") -Force
 $ErrorActionPreference = 'Stop'
 
 # 检查管理员权限
@@ -51,16 +52,8 @@ if (-not (Test-Administrator)) {
     Write-Host "    🔄 正在自动提权..." -ForegroundColor Cyan
     
     try {
-        # 加载配置以获取项目前缀
-        $configFile = Join-Path $dotfilesDir "config.psd1"
-        $projectPrefix = "dotfiles" # 默认值
-        $config = Import-PowerShellDataFile -Path $configFile
-        if ($config.ProjectSettings -and $config.ProjectSettings.ProjectPrefix) {
-            $projectPrefix = $config.ProjectSettings.ProjectPrefix
-        }
-
         # 创建临时日志文件
-        $logFile = Join-Path $env:TEMP "$($projectPrefix)_install_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
+        $logFile = Join-Path $env:TEMP "dotfiles_install_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
         
         # 启动提权进程
         $argumentList = @(
@@ -116,7 +109,7 @@ if (-not (Test-Administrator)) {
 }
 
 # 加载配置文件
-$configFile = Join-Path $dotfilesDir "config.psd1"
+$configFile = Join-Path $script:DotfilesDir "config.psd1"
 if (-not (Test-Path $configFile)) {
     Write-Error "配置文件未找到: $configFile"
     return
@@ -152,8 +145,8 @@ $successCount = 0
 $failureCount = 0
 
 foreach ($link in $config.Links) {
-    $sourcePath = Join-Path $dotfilesDir $link.Source
-    $targetPath = Resolve-ConfigPath -Path $link.Target -DotfilesDir $dotfilesDir
+    $sourcePath = Join-Path $script:DotfilesDir $link.Source
+    $targetPath = Resolve-ConfigPath -Path $link.Target -DotfilesDir $script:DotfilesDir
 
     if (-not (Test-Path $sourcePath)) {
         Write-InstallResult "⚠️ 跳过: 源文件未找到 '$sourcePath'" "Yellow"
@@ -175,48 +168,17 @@ foreach ($link in $config.Links) {
         switch ($method) {
             "Copy" {
                 Copy-Item -Path $sourcePath -Destination $targetPath -Force -ErrorAction Stop
-                Write-InstallResult "✅ 已复制 $($link.Comment)" "Green"
-            }
-            "Transform" {
-                if (-not $link.MappingId) {
-                    Write-InstallResult "❌ Transform配置缺少MappingId参数: $($link.Comment)" "Red"
-                    $failureCount++
-                    continue
-                }
-                
-                $transformScript = Join-Path $PSScriptRoot "transform.ps1"
-                if (-not (Test-Path $transformScript)) {
-                    Write-InstallResult "❌ 转换脚本未找到: $transformScript" "Red"
-                    $failureCount++
-                    continue
-                }
-
-                if ($Overwrite) {
-                    # 强制覆盖模式：先转换到临时文件，再覆盖目标
-                    $tempFile = [System.IO.Path]::GetTempFileName()
-                    try {
-                        & $transformScript -SourceFile $sourcePath -TargetFile $tempFile -TransformType $link.MappingId -ErrorAction Stop | Out-Null
-                        Copy-Item $tempFile $targetPath -Force
-                        Write-InstallResult "✅ 已覆盖 $($link.Comment)" "Green"
-                    } finally {
-                        if (Test-Path $tempFile) {
-                            Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
-                        }
-                    }
-                } else {
-                    # 目标文件不存在，直接转换
-                    & $transformScript -SourceFile $sourcePath -TargetFile $targetPath -TransformType $link.MappingId -ErrorAction Stop | Out-Null
-                    Write-InstallResult "✅ 已转换 $($link.Comment)" "Green"
-                }
+                Write-InstallResult "✅ 已复制: $($link.Comment)" "Green"
             }
             default {
                 New-Item -ItemType SymbolicLink -Path $targetPath -Target $sourcePath -Force -ErrorAction Stop | Out-Null
-                Write-InstallResult "✅ 已链接 $($link.Comment)" "Green"
+                Write-InstallResult "✅ 已链接: $($link.Comment)" "Green"
             }
         }
         $successCount++
     } catch {
-        Write-InstallResult "❌ 部署失败 $($link.Comment): $($_.Exception.Message)" "Red"
+        Write-InstallResult "❌ 部署失败: $($link.Comment)" "Red"
+        Write-InstallResult "   错误: $($_.Exception.Message)" "Gray"
         if ($method -eq "SymLink") {
             Write-InstallResult "💡 提示: 创建符号链接需要管理员权限" "Yellow"
         }
@@ -231,7 +193,6 @@ if ($failureCount -eq 0) {
 } elseif ($successCount -gt 0) {
     Write-InstallResult "⚠️ Dotfiles 安装部分完成（$successCount 成功，$failureCount 失败）" "Yellow"
 } else {
-    return Write-InstallResult "❌ Dotfiles 安装失败！" "Red"
+    Write-InstallResult "❌ Dotfiles 安装失败！" "Red"
 }
 Write-InstallResult "📊 处理了 $($successCount + $failureCount) 个配置项" "Green"
-Write-host ""

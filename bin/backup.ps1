@@ -7,21 +7,16 @@ param(
     [string]$Action = "create"
 )
 
-$dotfilesDir = Split-Path $PSScriptRoot -Parent
-
-# 导入工具模块
+#region 初始化
+$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
 Import-Module (Join-Path $PSScriptRoot "utils.psm1") -Force
+$script:Config = Get-DotfilesConfig
 
-# 加载配置文件
-$configFile = Join-Path $dotfilesDir "config.psd1"
-if (-not (Test-Path $configFile)) {
-    Write-Error "配置文件未找到: $configFile"
-    return
-}
-$config = Import-PowerShellDataFile -Path $configFile
-$backupSettings = $config.BackupSettings
-$backupBaseDir = Join-Path $dotfilesDir $backupSettings.BackupDir
+$script:BackupSettings = $script:Config.BackupSettings
+$script:BackupBaseDir = Join-Path $script:DotfilesDir $script:BackupSettings.BackupDir
+#endregion
 
+#region 帮助信息
 function Show-Help {
     Write-Host ""
     Write-Host "📋 备份工具使用说明" -ForegroundColor Green
@@ -41,14 +36,16 @@ function Show-Help {
     Write-Host "  .\backup.ps1 restore        # 恢复备份" -ForegroundColor Gray
     Write-Host ""
 }
+#endregion
 
+#region 备份操作
 function Create-Backup {
     Write-Host "    🔄 检查需要备份的配置文件..." -ForegroundColor Yellow
 
-    # 先检查是否有文件需要备份
+    # 收集需要备份的文件
     $filesToBackup = @()
-    foreach ($link in $config.Links) {
-        $targetPath = Resolve-ConfigPath -Path $link.Target -DotfilesDir $dotfilesDir
+    foreach ($link in $script:Config.Links) {
+        $targetPath = Resolve-ConfigPath -Path $link.Target -DotfilesDir $script:DotfilesDir
         if (Test-Path $targetPath) {
             $filesToBackup += @{
                 Link = $link
@@ -57,7 +54,6 @@ function Create-Backup {
         }
     }
 
-    # 如果没有文件需要备份，直接返回
     if ($filesToBackup.Count -eq 0) {
         Write-Host "    📭 没有找到需要备份的配置文件" -ForegroundColor Yellow
         Write-Host ""
@@ -65,11 +61,11 @@ function Create-Backup {
     }
 
     # 确定备份路径
-    if ($backupSettings.UseTimestamp) {
-        $timestamp = Get-Date -Format $backupSettings.TimestampFormat
-        $backupPath = Join-Path $backupBaseDir "backup_$timestamp"
+    if ($script:BackupSettings.UseTimestamp) {
+        $timestamp = Get-Date -Format $script:BackupSettings.TimestampFormat
+        $backupPath = Join-Path $script:BackupBaseDir "backup_$timestamp"
     } else {
-        $backupPath = $backupBaseDir
+        $backupPath = $script:BackupBaseDir
     }
 
     Write-Host "    📁 创建备份目录: $backupPath" -ForegroundColor Cyan
@@ -89,7 +85,6 @@ function Create-Backup {
         $link = $fileInfo.Link
         $targetPath = $fileInfo.TargetPath
 
-        # 创建相对于源文件的备份路径
         $backupFilePath = Join-Path $backupPath $link.Source
         $backupDir = Split-Path $backupFilePath -Parent
 
@@ -107,27 +102,16 @@ function Create-Backup {
         try {
             Copy-Item $targetPath $backupFilePath -Force -ErrorAction Stop
             Write-Host "    ✅ 备份: $($link.Comment)" -ForegroundColor Green
-            Write-Host "    $targetPath -> $backupFilePath" -ForegroundColor Gray
-            Write-Host ""
+            Write-Host "       $targetPath -> $backupFilePath" -ForegroundColor Gray
             $backedUpCount++
         } catch {
             Write-Host "    ⚠️ 备份失败: $($link.Comment). 错误: $($_.Exception.Message)" -ForegroundColor Yellow
         }
     }
 
-    # 清理旧备份（如果设置了最大备份数）
-    if ($backupSettings.MaxBackups -gt 0 -and $backupSettings.UseTimestamp) {
-        $allBackups = Get-ChildItem -Path $backupBaseDir -Directory | 
-                      Where-Object { $_.Name -match "^backup_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$" } |
-                      Sort-Object CreationTime -Descending
-        
-        if ($allBackups.Count -gt $backupSettings.MaxBackups) {
-            $toDelete = $allBackups | Select-Object -Skip $backupSettings.MaxBackups
-            foreach ($oldBackup in $toDelete) {
-                Write-Host "    🗑️ 删除旧备份: $($oldBackup.Name)" -ForegroundColor DarkGray
-                Remove-Item $oldBackup.FullName -Recurse -Force
-            }
-        }
+    # 清理旧备份
+    if ($script:BackupSettings.MaxBackups -gt 0 -and $script:BackupSettings.UseTimestamp) {
+        Clean-OldBackupsAuto
     }
 
     Write-Host ""
@@ -137,21 +121,21 @@ function Create-Backup {
 }
 
 function List-Backups {
-    Write-Host "    📁 备份目录: $backupBaseDir" -ForegroundColor Gray
+    Write-Host "    📁 备份目录: $script:BackupBaseDir" -ForegroundColor Gray
     Write-Host ""
 
-    if (-not (Test-Path $backupBaseDir)) {
+    if (-not (Test-Path $script:BackupBaseDir)) {
         Write-Host "    ❌ 备份目录不存在" -ForegroundColor Red
         Write-Host ""
-        return
+        return @()
     }
 
-    $backups = Get-ChildItem -Path $backupBaseDir -Directory -ErrorAction SilentlyContinue | Sort-Object CreationTime -Descending
+    $backups = Get-ChildItem -Path $script:BackupBaseDir -Directory -ErrorAction SilentlyContinue | Sort-Object CreationTime -Descending
 
     if ($backups.Count -eq 0) {
         Write-Host "    📭 没有找到备份文件" -ForegroundColor Yellow
         Write-Host ""
-        return
+        return @()
     }
 
     for ($i = 0; $i -lt $backups.Count; $i++) {
@@ -163,17 +147,12 @@ function List-Backups {
         Write-Host "        创建时间: $($backup.CreationTime.ToString('yyyy-MM-dd HH:mm:ss'))    大小: $sizeStr" -ForegroundColor Gray
         Write-Host ""
     }
+
+    return $backups
 }
 
 function Restore-FromBackup {
-    List-Backups
-
-    # 检查备份目录是否存在
-    if (-not (Test-Path $backupBaseDir)) {
-        return
-    }
-
-    $backups = Get-ChildItem -Path $backupBaseDir -Directory -ErrorAction SilentlyContinue | Sort-Object CreationTime -Descending
+    $backups = List-Backups
     if ($backups.Count -eq 0) {
         return
     }
@@ -197,11 +176,11 @@ function Restore-FromBackup {
     
     # 恢复文件
     $restoredCount = 0
-    foreach ($link in $config.Links) {
+    foreach ($link in $script:Config.Links) {
         $backupFilePath = Join-Path $selectedBackup.FullName $link.Source
 
         if (Test-Path $backupFilePath) {
-            $targetPath = Resolve-ConfigPath -Path $link.Target -DotfilesDir $dotfilesDir
+            $targetPath = Resolve-ConfigPath -Path $link.Target -DotfilesDir $script:DotfilesDir
 
             # 确保目标目录存在
             $targetDir = Split-Path $targetPath -Parent
@@ -222,13 +201,16 @@ function Restore-FromBackup {
 }
 
 function Clean-OldBackups {
-    if (-not (Test-Path $backupBaseDir)) {
+    Write-Host "    📁 备份目录: $script:BackupBaseDir" -ForegroundColor Gray
+    Write-Host ""
+
+    if (-not (Test-Path $script:BackupBaseDir)) {
         Write-Host "    ❌ 备份目录不存在" -ForegroundColor Red
         Write-Host ""
         return
     }
 
-    $backups = Get-ChildItem -Path $backupBaseDir -Directory | Sort-Object CreationTime -Descending
+    $backups = Get-ChildItem -Path $script:BackupBaseDir -Directory -ErrorAction SilentlyContinue | Sort-Object CreationTime -Descending
 
     if ($backups.Count -eq 0) {
         Write-Host "    📭 没有找到备份文件" -ForegroundColor Yellow
@@ -265,10 +247,26 @@ function Clean-OldBackups {
     }
 }
 
+# 自动清理旧备份（内部使用）
+function Clean-OldBackupsAuto {
+    $allBackups = Get-ChildItem -Path $script:BackupBaseDir -Directory | 
+                  Where-Object { $_.Name -match "^backup_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$" } |
+                  Sort-Object CreationTime -Descending
+    
+    if ($allBackups.Count -gt $script:BackupSettings.MaxBackups) {
+        $toDelete = $allBackups | Select-Object -Skip $script:BackupSettings.MaxBackups
+        foreach ($oldBackup in $toDelete) {
+            Write-Host "    🗑️ 删除旧备份: $($oldBackup.Name)" -ForegroundColor DarkGray
+            Remove-Item $oldBackup.FullName -Recurse -Force
+        }
+    }
+}
+#endregion
+
 # 执行操作
 switch ($Action) {
     "create" { Create-Backup }
-    "list" { List-Backups }
+    "list" { List-Backups | Out-Null }
     "restore" { Restore-FromBackup }
     "clean" { Clean-OldBackups }
     "help" { Show-Help }

@@ -1,24 +1,155 @@
 ﻿# transform.ps1
-# 通用 JSON 配置文件格式转换工具
-# 支持智能合并，保持源文件格式和字段顺序
+# 基于 TransformSettings 进行配置文件转换和生成
+# 支持命令行手动执行，可生成全部或指定配置
 
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$SourceFile,
-    [Parameter(Mandatory = $true)]
-    [string]$TargetFile,
-    [Parameter(Mandatory = $true)]
-    [string]$TransformType,
-    [switch]$Overwrite
+    [string]$Type,      # 可选：指定配置类型 (mcp, editor) 或具体配置 (mcp:vscode)
+    [switch]$Force,     # 强制重新生成文件
+    [switch]$Remove,    # 反转操作：从目标文件中移除相关配置
+    [switch]$Help       # 显示帮助信息
 )
 
-$TransformType = $TransformType.Trim("'", '"')
+#region 帮助信息
+function Show-Help {
+    $scriptName = ".\bin\transform.ps1"
+    Write-Host ""
+    Write-Host "📋 配置文件转换工具使用说明" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "用法: $scriptName [参数]" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "参数:" -ForegroundColor Yellow
+    Write-Host "  -Type            指定要生成的配置类型 (格式: 类型 或 类型:平台)" -ForegroundColor White
+    Write-Host "  -Force           强制重新生成文件（默认会与现有配置合并）" -ForegroundColor White
+    Write-Host "  -Remove          反转操作：从目标文件中移除指定配置" -ForegroundColor White
+    Write-Host "  -Help            显示此帮助信息" -ForegroundColor White
+    Write-Host ""
+    Write-Host "示例:" -ForegroundColor Yellow
+    Write-Host "  $scriptName                           # 生成所有配置" -ForegroundColor White
+    Write-Host "  $scriptName -Type mcp                 # 只生成 MCP 配置" -ForegroundColor White
+    Write-Host "  $scriptName -Type mcp:vscode -Force   # 强制生成 VSCode MCP" -ForegroundColor White
+    Write-Host "  $scriptName -Type mcp:vscode -Remove  # 从 VSCode MCP 配置中移除相关配置" -ForegroundColor White
+    Write-Host ""
+}
+
+if ($Help) {
+    Show-Help
+    return
+}
+#endregion
+
+#region 初始化
+$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
+Import-Module (Join-Path $PSScriptRoot "utils.psm1") -Force
+$script:Config = Get-DotfilesConfig
+
 $ErrorActionPreference = 'Stop'
 
-# 引入共享函数
-Import-Module (Join-Path $PSScriptRoot "utils.psm1")
+# 输出信息
+function Write-TransformResult {
+    param([string]$Message, [string]$Color = "White")
+    Write-Host $Message -ForegroundColor $Color
+}
+#endregion
 
-try {
+#region 转换逻辑
+# 执行移除任务
+function Invoke-RemoveTask {
+    param($Task, [string]$SourceFile, [string]$TargetFile)
+    
+    # 检查目标文件是否存在
+    if (-not (Test-Path $TargetFile)) {
+        Write-TransformResult "⚠️ 目标文件不存在，跳过: $($Task.TargetFile)" "Yellow"
+        return $false
+    }
+    
+    try {
+        Write-TransformResult "🗑️ 移除: $($Task.Comment)" "Cyan"
+        Write-TransformResult "   从 $($Task.TargetFile) 移除相关配置" "Gray"
+        
+        # 执行移除操作
+        Invoke-FileRemove -SourceFile $SourceFile -TargetFile $TargetFile -TransformType $Task.TransformType
+        
+        return $true
+    }
+    catch {
+        Write-TransformResult "❌ 移除失败: $($Task.Comment)" "Red"
+        Write-TransformResult "   错误: $($_.Exception.Message)" "Red"
+        return $false
+    }
+}
+
+# 执行单个转换任务
+function Invoke-TransformTask {
+    param($Task)
+    
+    $sourceFullPath = Join-Path $script:DotfilesDir $Task.SourceFile
+    $targetFullPath = Join-Path $script:DotfilesDir $Task.TargetFile
+    
+    # 如果是移除模式
+    if ($Remove) {
+        return Invoke-RemoveTask -Task $Task -SourceFile $sourceFullPath -TargetFile $targetFullPath
+    }
+    
+    # 检查源文件是否存在
+    if (-not (Test-Path $sourceFullPath)) {
+        Write-TransformResult "⚠️ 源文件不存在，跳过: $($Task.SourceFile)" "Yellow"
+        return $false
+    }
+    
+    # 检查是否需要覆盖
+    if ((Test-Path $targetFullPath) -and -not $Force) {
+        Write-TransformResult "⏩ 文件已存在，跳过: $($Task.TargetFile) (使用 -Force 强制覆盖)" "Yellow"
+        return $false
+    }
+    
+    try {
+        Write-TransformResult "🔄 生成: $($Task.Comment)" "Cyan"
+        Write-TransformResult "   $($Task.SourceFile) -> $($Task.TargetFile)" "Gray"
+        
+        # 确保目标目录存在
+        $targetDir = Split-Path $targetFullPath -Parent
+        if (-not (Test-Path $targetDir)) {
+            New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+        }
+        
+        # 执行转换
+        Invoke-FileTransform -SourceFile $sourceFullPath -TargetFile $targetFullPath -TransformType $Task.TransformType
+        
+        return $true
+    }
+    catch {
+        Write-TransformResult "❌ 生成失败: $($Task.Comment)" "Red"
+        Write-TransformResult "   错误: $($_.Exception.Message)" "Red"
+        return $false
+    }
+}
+
+# 核心移除逻辑
+function Invoke-FileRemove {
+    param([string]$SourceFile, [string]$TargetFile, [string]$TransformType)
+    
+    # 解析转换类型参数
+    $parts = $TransformType -split ":"
+    if ($parts.Length -ne 2) {
+        throw "无效的转换类型格式。预期格式为'format:platform'。"
+    }
+    $format = $parts[0]
+    $platform = $parts[1]
+
+    # 获取配置
+    $config = Get-TransformConfig -Format $format
+    
+    # 获取要移除的字段列表
+    $fieldsToRemove = Get-SourceFields -Config $config -Platform $platform -SourceFile $SourceFile
+    
+    # 从目标文件移除字段
+    Remove-ConfigFields -TargetFile $TargetFile -FieldsToRemove $fieldsToRemove
+}
+
+# 核心转换逻辑
+function Invoke-FileTransform {
+    param([string]$SourceFile, [string]$TargetFile, [string]$TransformType)
+    
     # 解析转换类型参数
     $parts = $TransformType -split ":"
     if ($parts.Length -ne 2) {
@@ -31,36 +162,28 @@ try {
     $config = Get-TransformConfig -Format $format
     
     # 检查是否支持分层合并
-    # 优先处理分层合并
     if ($config.Layered -and $config.Layered.$platform) {
-        $sourceObject = Invoke-LayeredTransform -Config $config -Platform $platform -SourceFile $SourceFile -TargetFile $TargetFile -Overwrite:$Overwrite
+        $sourceObject = Invoke-LayeredTransform -Config $config -Platform $platform -SourceFile $SourceFile -TargetFile $TargetFile -Overwrite:$true
     }
-    # 如果没有分层合并，则正常读取源文件
     else {
-        if (-not (Test-Path $SourceFile)) {
-            throw "源文件未找到: $SourceFile"
-        }
         $sourceContent = Get-Content $SourceFile -Raw -Encoding UTF8
         $sourceObject = ConvertFrom-Jsonc -Content $sourceContent
     }
     
-    # 可选的字段映射转换
+    # 字段映射转换
     $defaultField = $config.DefaultField
-    $platformField = $config.DefaultField  # 默认值
+    $platformField = $config.DefaultField
     if ($config.Platforms -and $config.Platforms.ContainsKey($platform)) {
         $platformField = $config.Platforms[$platform]
     }
 
-    # 仅当字段映射有效且需要转换时才执行
     if ($defaultField -and $platformField -and $defaultField -ne $platformField) {
         $sourceKey = $defaultField
         $targetKey = $platformField
         
-        # 如果源对象包含需要转换的键
         if ($sourceObject.psobject.Properties.Name -contains $sourceKey) {
             $dataToTransform = $sourceObject.$sourceKey
             
-            # 创建新的结果对象，严格按源对象的字段顺序构建
             $orderedResult = [pscustomobject]@{}
             foreach ($prop in $sourceObject.psobject.Properties) {
                 if ($prop.Name -eq $sourceKey) {
@@ -73,7 +196,7 @@ try {
         }
     }
 
-    # 准备目标对象（安全处理空文件和无效JSON）
+    # 准备目标对象
     $resultObject = [pscustomobject]@{}
     if (Test-Path $TargetFile) {
         try {
@@ -90,14 +213,142 @@ try {
         }
     }
 
-    # 将最终处理过的对象与目标文件中的现有数据进行智能合并
+    # 智能合并并写入文件
     $resultObject = Merge-JsonObjects -Base $resultObject -Override $sourceObject
-
-    # 写入最终文件
     Write-OutputFile -Content $resultObject -TargetFile $TargetFile
+}
 
+# 收集转换任务
+function Get-TransformTasks {
+    param([string]$FilterType)
+    
+    $tasks = @()
+    
+    # 精确匹配：类型:平台
+    if ($FilterType -and $FilterType.Contains(":")) {
+        $parts = $FilterType -split ":"
+        $configType = $parts[0]
+        $platform = $parts[1]
+        
+        if (-not $script:Config.TransformSettings.ContainsKey($configType)) {
+            return @()
+        }
+        
+        $setting = $script:Config.TransformSettings[$configType]
+        
+        # 检查平台支持
+        if ($setting.Layered -and $setting.Layered.Count -gt 0 -and -not $setting.Layered.ContainsKey($platform)) {
+            Write-TransformResult "❌ 配置类型 '$configType' 不支持平台 '$platform'" "Red"
+            return @()
+        }
+        
+        # 查找匹配的 Link 配置
+        $matchingLinks = $script:Config.Links | Where-Object {
+            $_.Method -eq "Copy" -and 
+            [System.IO.Path]::GetFileNameWithoutExtension((Split-Path $_.Source -Leaf)) -eq $platform -and 
+            $_.Source -like "*\$configType\*" 
+        }
+        
+        if ($matchingLinks) {
+            foreach ($link in $matchingLinks) {
+                $tasks += @{
+                    SourceFile = $setting.SourceFile
+                    TargetFile = $link.Source
+                    TransformType = $FilterType
+                    Comment = $link.Comment
+                }
+            }
+        } else {
+            # 创建默认输出路径（不使用 dist 前缀）
+            $tasks += @{
+                SourceFile = $setting.SourceFile
+                TargetFile = "$configType\$platform.json"
+                TransformType = $FilterType
+                Comment = "$configType $platform 配置"
+            }
+        }
+    } else {
+        # 遍历所有 Copy 方法的 Links
+        foreach ($link in $script:Config.Links) {
+            if ($link.Method -eq "Copy") {
+                $fileBaseName = [System.IO.Path]::GetFileNameWithoutExtension((Split-Path $link.Source -Leaf))
+                
+                foreach ($configType in $script:Config.TransformSettings.Keys) {
+                    $setting = $script:Config.TransformSettings[$configType]
+                    
+                    # 检查平台支持
+                    $platformSupported = $false
+                    if ($setting.Layered -and $setting.Layered.ContainsKey($fileBaseName)) {
+                        $platformSupported = $true
+                    } elseif ($setting.Platforms -and $setting.Platforms.ContainsKey($fileBaseName)) {
+                        $platformSupported = $true
+                    } elseif (-not $setting.Layered -and -not $setting.Platforms) {
+                        $platformSupported = $true
+                    }
+                    
+                    if ($platformSupported -and (-not $FilterType -or $configType -eq $FilterType)) {
+                        $tasks += @{
+                            SourceFile = $setting.SourceFile
+                            TargetFile = $link.Source
+                            TransformType = "$configType`:$fileBaseName"
+                            Comment = $link.Comment
+                        }
+                        break
+                    }
+                }
+            }
+        }
+    }
+    
+    return $tasks
 }
-catch {
-    Write-Error "    转换失败: $($_.Exception.Message)"
-    exit 1
+#endregion
+
+#region 主执行逻辑
+# 启动转换过程
+if ($Remove) {
+    Write-TransformResult "🗑️ 开始移除配置..." "Green"
+} else {
+    Write-TransformResult "🚀 开始生成配置文件..." "Green"
 }
+Write-TransformResult ""
+
+# 获取转换任务
+$tasks = Get-TransformTasks -FilterType $Type
+
+if ($tasks.Count -eq 0) {
+    if ($Type) {
+        Write-TransformResult "❌ 未找到匹配的配置: $Type" "Red"
+        Write-TransformResult "💡 使用 -Help 查看支持的配置类型" "Yellow"
+    } else {
+        Write-TransformResult "❌ 未找到需要转换的配置" "Red"
+    }
+    Write-TransformResult ""
+    return
+}
+
+$generated = 0
+$skipped = 0
+
+foreach ($task in $tasks) {
+    if (Invoke-TransformTask -Task $task) {
+        $generated++
+    } else {
+        $skipped++
+    }
+}
+
+# 显示结果
+Write-TransformResult ""
+if ($Remove) {
+    Write-TransformResult "✨ 移除完成!" "Green"
+    Write-TransformResult "📊 处理: $generated 个文件" "Green"
+} else {
+    Write-TransformResult "✨ 转换完成!" "Green"
+    Write-TransformResult "📊 生成: $generated 个文件" "Green"
+}
+if ($skipped -gt 0) {
+    Write-TransformResult "📊 跳过: $skipped 个文件" "Yellow"
+}
+Write-TransformResult ""
+#endregion

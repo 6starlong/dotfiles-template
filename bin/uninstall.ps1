@@ -1,170 +1,66 @@
 ﻿# uninstall.ps1
-# 智能移除 install.ps1 部署的配置文件
-# 对于 Transform 方法：只移除 dotfiles 管理的字段，保留用户自定义配置
-# 对于其他方法：直接删除文件
+# 移除 install.ps1 部署的配置文件
 
 $ErrorActionPreference = 'Stop'
-$dotfilesDir = Split-Path $PSScriptRoot -Parent
 
-# 引入共享函数
-Import-Module (Join-Path $PSScriptRoot "utils.psm1")
+#region 初始化
+$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
+Import-Module (Join-Path $PSScriptRoot "utils.psm1") -Force
+$script:Config = Get-DotfilesConfig
+#endregion
 
-# 智能移除 JSON 字段
-function Remove-JsonField {
+#region 主卸载逻辑
+# 处理单个配置链接的卸载
+function Process-ConfigUninstall {
     param(
-        [string]$FilePath,
-        [string]$TransformType,
-        [string]$SourceFile
+        [hashtable]$Link,
+        [ref]$RemovedCount,
+        [ref]$SkippedCount
     )
-    
-    try {
-        # 解析转换类型参数
-        $parts = $TransformType -split ":"
-        if ($parts.Length -ne 2) {
-            throw "无效的转换类型格式。预期格式为'format:platform'。"
-        }
-        $format = $parts[0]
-        $platform = $parts[1]
 
-        # 获取配置
-        $config = Get-TransformConfig -Format $format
-        
-        # 获取源文件字段列表
-        $sourceFields = Get-SourceFields -Config $config -Platform $platform -SourceFile $SourceFile
+    $targetPath = Resolve-ConfigPath -Path $Link.Target -DotfilesDir $script:DotfilesDir
+    $method = Get-Method -Link $Link
 
-        # 读取目标文件
-        if (-not (Test-Path $FilePath)) {
-            Write-Warning "文件不存在: $FilePath"
-            return $false
-        }
-
-        $content = Get-Content $FilePath -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
-        if (-not $content -or -not $content.Trim()) {
-            Write-Warning "文件为空或无效: $FilePath"
-            Remove-Item $FilePath -Force
-            return $true
-        }
-
-        # 解析目标 JSON
-        $jsonObject = ConvertFrom-Jsonc -Content $content
-        if (-not $jsonObject) {
-            Write-Warning "无法解析 JSON 文件: $FilePath"
-            return $false
-        }
-
-        # 移除所有来自源文件的字段
-        $fieldsRemoved = @()
-        
-        # 移除源文件中的所有字段
-        foreach ($sourceField in $sourceFields) {
-            if ($jsonObject.psobject.Properties[$sourceField]) {
-                $jsonObject.psobject.Properties.Remove($sourceField)
-                $fieldsRemoved += $sourceField
-            }
-        }
-
-        # 如果没有移除任何字段，说明文件中不包含 dotfiles 管理的内容
-        if ($fieldsRemoved.Count -eq 0) {
-            write-host "    " -NoNewline
-            Write-Warning "文件中未找到 dotfiles 管理的字段: $FilePath"
-            return $false
-        }
-
-        # 检查是否还有其他字段
-        $hasProperties = $false
-        foreach ($prop in $jsonObject.psobject.Properties) {
-            $hasProperties = $true
-            break
-        }
-        
-        if (-not $hasProperties) {
-            # 如果对象为空，删除文件
-            Remove-Item $FilePath -Force
-            return $true
-        }
-
-        # 生成格式化的 JSON 并写回文件
-        $rawJson = $jsonObject | ConvertTo-Json -Depth 100 -Compress:$false
-        $finalJson = Format-JsonClean -JsonString $rawJson -Indent 2
-        Set-Content -Path $FilePath -Value ($finalJson + [System.Environment]::NewLine) -Encoding UTF8 -NoNewline
-
-        return $true
+    if (-not (Test-Path $targetPath)) {
+        Write-Host "    ⏩ 跳过: $($Link.Comment) (文件不存在)" -ForegroundColor Cyan
+        $SkippedCount.Value++
+        return
     }
-    catch {
-        Write-Error "处理 JSON 文件失败 ($FilePath): $($_.Exception.Message)"
-        return $false
+
+    try {
+        Remove-Item $targetPath -Force -ErrorAction Stop
+        Write-Host "    🔥 已移除: $($Link.Comment)" -ForegroundColor Green
+        Write-Host "       $targetPath" -ForegroundColor Gray
+        $RemovedCount.Value++
+    } catch {
+        Write-Host "    ❌ 移除失败: $($Link.Comment)" -ForegroundColor Red
+        Write-Host "       错误: $($_.Exception.Message)" -ForegroundColor Gray
+        $SkippedCount.Value++
     }
 }
 
-# 主执行逻辑
-try {
-    # 加载配置文件
-    $configFile = Join-Path $dotfilesDir "config.psd1"
-    if (-not (Test-Path $configFile)) {
-        Write-Error "配置文件未找到: $configFile"
-        return
-    }
-    $config = Import-PowerShellDataFile -Path $configFile
-
+# 启动卸载过程
+function Start-UninstallProcess {
     Write-Host "    🗑️ 开始卸载 dotfiles 配置..." -ForegroundColor Yellow
     Write-Host ""
 
     $removedCount = 0
     $skippedCount = 0
-    $partialCount = 0
 
-    # 处理配置移除
-    foreach ($link in $config.Links) {
-        $targetPath = Resolve-ConfigPath -Path $link.Target -DotfilesDir $dotfilesDir
-        $method = if ($link.Method) { $link.Method } else { $config.DefaultMethod }
-
-        if (-not (Test-Path $targetPath)) {
-            Write-Host "    ⏩ 跳过 ($($link.Comment)): 文件不存在" -ForegroundColor Cyan
-            $skippedCount++
-            continue
-        }
-
-        try {
-            if ($method -eq "Transform" -and $link.MappingId) {
-                # 智能移除 JSON 字段
-                $sourcePath = Join-Path $dotfilesDir $link.Source
-                $result = Remove-JsonField -FilePath $targetPath -TransformType $link.MappingId -SourceFile $sourcePath
-                if ($result) {
-                    if (Test-Path $targetPath) {
-                        Write-Host "    🧹 已清理字段 ($($link.Comment)): $targetPath" -ForegroundColor Yellow
-                        $partialCount++
-                    } else {
-                        Write-Host "    🔥 已移除 ($($link.Comment)): $targetPath" -ForegroundColor Green
-                        $removedCount++
-                    }
-                } else {
-                    Write-Host "    ⏩ 跳过 ($($link.Comment))" -ForegroundColor Cyan
-                    $skippedCount++
-                }
-            } else {
-                # 直接删除文件（SymLink 和 Copy 方法）
-                Remove-Item $targetPath -Force -ErrorAction Stop
-                Write-Host "    🔥 已移除 ($($link.Comment)): $targetPath" -ForegroundColor Green
-                $removedCount++
-            }
-        } catch {
-            Write-Host "    ❌ 处理失败 ($($link.Comment)): $($_.Exception.Message)" -ForegroundColor Red
-            $skippedCount++
-        }
+    # 处理所有配置链接
+    foreach ($link in $script:Config.Links) {
+        Process-ConfigUninstall -Link $link -RemovedCount ([ref]$removedCount) -SkippedCount ([ref]$skippedCount)
     }
 
+    # 显示最终统计
     Write-Host ""
-    Write-Host "    ✅ 卸载完成！" -ForegroundColor Green
-    
-    $statusParts = @()
-    if ($removedCount -gt 0) { $statusParts += "移除了 $removedCount 个文件" }
-    if ($partialCount -gt 0) { $statusParts += "清理了 $partialCount 个配置字段" }
-    if ($skippedCount -gt 0) { $statusParts += "跳过 $skippedCount 个" }
-    
-    Write-Host "    📊 $($statusParts -join '，')" -ForegroundColor Green
-    Write-Host ""
+    Write-Host "    📊 卸载完成!" -ForegroundColor Green
+    Write-Host "    🔥 已移除: $removedCount 个文件" -ForegroundColor Green
+    if ($skippedCount -gt 0) {
+        Write-Host "    ⏩ 已跳过: $skippedCount 个文件" -ForegroundColor Cyan
+    }
 }
-catch {
-    Write-Error "卸载过程中发生错误: $($_.Exception.Message)"
-    exit 1
-}
+#endregion
+
+# 启动卸载过程
+Start-UninstallProcess

@@ -80,8 +80,7 @@ function Execute-Action {
         & powershell -ExecutionPolicy Bypass -File $scriptPath
         Write-Host ""
         Write-Host "    [成功] 操作完成！" -ForegroundColor Green
-    }
-    catch {
+    } catch {
         Write-Host ""
         Write-Host "    [错误] 执行过程中发生错误！" -ForegroundColor Red
         Write-Host "    错误详情: $($_.Exception.Message)" -ForegroundColor Red

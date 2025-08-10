@@ -5,6 +5,33 @@ $script:DotfilesDir = Split-Path $PSScriptRoot -Parent
 
 # ==================== 基础工具函数 ====================
 
+# 获取部署方式
+function Get-Method {
+    [CmdletBinding()]
+    param([hashtable]$Link)
+    
+    # 如果需要配置文件，先加载
+    if (-not $script:Config) {
+        $script:Config = Get-DotfilesConfig
+    }
+    
+    $method = if ($Link.Method) { $Link.Method } else { $script:Config.DefaultMethod }
+    if ($method) { return $method } else { return "SymLink" }
+}
+
+# 加载 dotfiles 配置文件
+function Get-DotfilesConfig {
+    [CmdletBinding()]
+    param()
+    
+    $configFile = Join-Path $script:DotfilesDir "config.psd1"
+    if (-not (Test-Path $configFile)) {
+        throw "配置文件未找到: $configFile"
+    }
+    
+    return Import-PowerShellDataFile $configFile
+}
+
 # 将JSONC内容转换为JSON对象
 function ConvertFrom-Jsonc {
     [CmdletBinding()]
@@ -29,12 +56,10 @@ function Format-JsonClean {
         [int]$Indent = 2
     )
     
-    # 移除PowerShell的多余空格和奇怪格式
+    # 清理多余空格和空行
     $cleanJson = $JsonString -replace '\s*:\s*\[\s*\]', ': []' `
                               -replace '\s*:\s*\{\s*\}', ': {}' `
-                              -replace ':\s+\[', ': [' `
-                              -replace ':\s+\{', ': {' `
-                              -replace ':\s+([tfn"\d\[\{])', ': $1' `
+                              -replace ':\s+(["\d\[\{tfn])', ': $1' `
                               -replace '(?m)^\s*$\n', ''
     
     # 重新格式化缩进
@@ -183,48 +208,19 @@ function Restore-UnicodeCharacters {
         [string]$JsonString
     )
     
-    # 常见的Unicode转义字符映射（只处理常见的可打印ASCII字符）
-    $unicodeReplacements = @{
-        '\\u0027' = "'"      # 单引号
-        '\\u0026' = '&'      # &符号
-        '\\u003c' = '<'      # 小于号
-        '\\u003e' = '>'      # 大于号
-        '\\u002f' = '/'      # 斜杠
-        '\\u005c' = '\'      # 反斜杠
-        '\\u0022' = '"'      # 双引号
-        '\\u0020' = ' '      # 空格
-        '\\u0021' = '!'      # 感叹号
-        '\\u0023' = '#'      # 井号
-        '\\u0024' = '$'      # 美元符号
-        '\\u0025' = '%'      # 百分号
-        '\\u0028' = '('      # 左括号
-        '\\u0029' = ')'      # 右括号
-        '\\u002a' = '*'      # 星号
-        '\\u002b' = '+'      # 加号
-        '\\u002c' = ','      # 逗号
-        '\\u002d' = '-'      # 减号
-        '\\u002e' = '.'      # 句号
-        '\\u003a' = ':'      # 冒号
-        '\\u003b' = ';'      # 分号
-        '\\u003d' = '='      # 等号
-        '\\u003f' = '?'      # 问号
-        '\\u0040' = '@'      # @符号
-        '\\u005b' = '['      # 左方括号
-        '\\u005d' = ']'      # 右方括号
-        '\\u005e' = '^'      # 脱字符
-        '\\u005f' = '_'      # 下划线
-        '\\u0060' = '`'      # 反引号
-        '\\u007b' = '{'      # 左大括号
-        '\\u007c' = '|'      # 竖线
-        '\\u007d' = '}'      # 右大括号
-        '\\u007e' = '~'      # 波浪号
-    }
-    
+    # 处理Unicode转义字符（直接替换常用字符）
     $result = $JsonString
-    
-    # 处理Unicode转义字符
-    foreach ($unicode in $unicodeReplacements.Keys) {
-        $result = $result -replace $unicode, $unicodeReplacements[$unicode]
+    foreach ($pair in @(
+        ('\\u0027', "'"), ('\\u0026', '&'), ('\\u003c', '<'), ('\\u003e', '>'),
+        ('\\u002f', '/'), ('\\u005c', '\'), ('\\u0022', '"'), ('\\u0020', ' '),
+        ('\\u0021', '!'), ('\\u0023', '#'), ('\\u0024', '$'), ('\\u0025', '%'),
+        ('\\u0028', '('), ('\\u0029', ')'), ('\\u002a', '*'), ('\\u002b', '+'),
+        ('\\u002c', ','), ('\\u002d', '-'), ('\\u002e', '.'), ('\\u003a', ':'),
+        ('\\u003b', ';'), ('\\u003d', '='), ('\\u003f', '?'), ('\\u0040', '@'),
+        ('\\u005b', '['), ('\\u005d', ']'), ('\\u005e', '^'), ('\\u005f', '_'),
+        ('\\u0060', '`'), ('\\u007b', '{'), ('\\u007c', '|'), ('\\u007d', '}'), ('\\u007e', '~')
+    )) {
+        $result = $result -replace $pair[0], $pair[1]
     }
     
     return $result
@@ -279,36 +275,6 @@ function Test-FileContentEqual {
         $content2 = Get-Content $File2 -Raw -ErrorAction Stop
         return $content1 -eq $content2
     } catch {
-        return $false
-    }
-}
-
-# 比较两个JSON/JSONC文件的语义内容是否相等（忽略注释和格式）
-function Test-JsonContentEqual {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][string]$File1,
-        [Parameter(Mandatory)][string]$File2
-    )
-
-    try {
-        # 如果任一文件不存在，则认为不相等
-        if (-not (Test-Path $File1) -or -not (Test-Path $File2)) {
-            return $false
-        }
-        
-        # 读取并解析为对象
-        $obj1 = Get-Content $File1 -Raw | ConvertFrom-Jsonc
-        $obj2 = Get-Content $File2 -Raw | ConvertFrom-Jsonc
-        
-        # 转换为规范的、压缩的JSON字符串进行比较
-        $canonical1 = $obj1 | ConvertTo-Json -Depth 100 -Compress
-        $canonical2 = $obj2 | ConvertTo-Json -Depth 100 -Compress
-        
-        return $canonical1 -eq $canonical2
-    }
-    catch {
-        # 解析失败或任何其他错误都意味着不相等
         return $false
     }
 }
@@ -440,7 +406,7 @@ function Invoke-LayeredTransform {
     return $mergedConfig
 }
 
-# ==================== 卸载相关函数 ====================
+# ==================== 配置移除函数 ====================
 
 # 获取源文件字段列表（用于卸载）
 function Get-SourceFields {
@@ -508,6 +474,79 @@ function Get-SourceFields {
     }
     
     return $allTargetFields | Select-Object -Unique
+}
+
+# 从目标文件中移除指定的配置字段
+function Remove-ConfigFields {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$TargetFile,
+        
+        [Parameter(Mandatory)]
+        [array]$FieldsToRemove
+    )
+    
+    # 如果没有要移除的字段，直接返回
+    if (-not $FieldsToRemove -or $FieldsToRemove.Count -eq 0) {
+        Write-Verbose "没有要移除的字段，跳过操作"
+        return
+    }
+    
+    # 读取目标文件
+    if (-not (Test-Path $TargetFile)) {
+        Write-Warning "目标文件不存在: $TargetFile"
+        return
+    }
+    
+    try {
+        $targetContent = Get-Content $TargetFile -Raw -Encoding UTF8
+        if (-not $targetContent -or -not $targetContent.Trim()) {
+            Write-Warning "目标文件为空: $TargetFile"
+            return
+        }
+        
+        $targetObject = ConvertFrom-Jsonc -Content $targetContent
+        if (-not $targetObject) {
+            Write-Warning "无法解析目标文件: $TargetFile"
+            return
+        }
+        
+        # 记录移除的字段
+        $removedFields = @()
+        
+        # 移除指定的字段
+        foreach ($fieldName in $FieldsToRemove) {
+            if ($targetObject.PSObject.Properties[$fieldName]) {
+                $targetObject.PSObject.Properties.Remove($fieldName)
+                $removedFields += $fieldName
+                Write-Verbose "已移除字段: $fieldName"
+            }
+        }
+        
+        # 如果没有移除任何字段，提示用户
+        if ($removedFields.Count -eq 0) {
+            Write-Warning "未找到要移除的字段: $($FieldsToRemove -join ', ')"
+            return
+        }
+        
+        # 检查移除字段后对象是否为空
+        $remainingProperties = @($targetObject.PSObject.Properties | Where-Object { $_.MemberType -eq 'NoteProperty' })
+        
+        if ($remainingProperties.Count -eq 0) {
+            # 如果对象为空，直接删除文件
+            Remove-Item -Path $TargetFile -Force
+            Write-Verbose "对象为空，已删除文件: $TargetFile"
+            Write-Verbose "成功移除 $($removedFields.Count) 个字段: $($removedFields -join ', ')"
+        } else {
+            # 写回文件
+            Write-OutputFile -Content $targetObject -TargetFile $TargetFile
+            Write-Verbose "成功移除 $($removedFields.Count) 个字段: $($removedFields -join ', ')"
+        }
+        
+    } catch {
+        throw "移除配置字段失败: $($_.Exception.Message)"
+    }
 }
 
 # ==================== 模块导出 ====================
