@@ -78,6 +78,13 @@ function Start-UninstallProcess {
 
     # 处理所有配置链接
     foreach ($link in $script:Config.Links) {
+        # 检查是否应该忽略此配置项
+        if (Test-ConfigIgnored -Link $link) {
+            Write-Host "    ⏩ 忽略: $($link.Comment)" -ForegroundColor Gray
+            $skippedCount++
+            continue
+        }
+
         Process-ConfigUninstall -Link $link -RemovedCount ([ref]$removedCount) -SkippedCount ([ref]$skippedCount)
     }
 

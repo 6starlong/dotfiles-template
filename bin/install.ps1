@@ -145,6 +145,12 @@ $successCount = 0
 $failureCount = 0
 
 foreach ($link in $config.Links) {
+    # 检查是否应该忽略此配置项
+    if (Test-ConfigIgnored -Link $link) {
+        Write-InstallResult "⏩ 忽略: $($link.Comment)" "Gray"
+        continue
+    }
+
     $sourcePath = Join-Path $script:DotfilesDir $link.Source
     $targetPath = Resolve-ConfigPath -Path $link.Target -DotfilesDir $script:DotfilesDir
 

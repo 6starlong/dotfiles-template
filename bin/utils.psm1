@@ -32,6 +32,95 @@ function Get-DotfilesConfig {
     return Import-PowerShellDataFile $configFile
 }
 
+# 检查路径是否匹配ignore模式（类似 .gitignore 语法）
+function Test-IgnorePattern {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+        
+        [Parameter(Mandatory)]
+        [string]$Pattern
+    )
+    
+    if ([string]::IsNullOrWhiteSpace($Pattern)) { return $false }
+    
+    # 标准化路径分隔符
+    $path = $Path -replace '\\', '/'
+    $pattern = $Pattern -replace '\\', '/'
+    
+    # 构建正则表达式
+    $regex = $pattern
+    
+    # 转义正则表达式特殊字符（保留 * 和 ?）
+    $regex = $regex -replace '\.', '\.'
+    $regex = $regex -replace '\+', '\+'
+    $regex = $regex -replace '\[', '\['
+    $regex = $regex -replace '\]', '\]'
+    $regex = $regex -replace '\(', '\('
+    $regex = $regex -replace '\)', '\)'
+    $regex = $regex -replace '\{', '\{'
+    $regex = $regex -replace '\}', '\}'
+    $regex = $regex -replace '\^', '\^'
+    $regex = $regex -replace '\$', '\$'
+    $regex = $regex -replace '\|', '\|'
+    
+    # 处理通配符：先处理 **，再处理 *
+    $regex = $regex -replace '\*\*', '§GLOBSTAR§'
+    $regex = $regex -replace '\*', '[^/]*'
+    $regex = $regex -replace '\?', '[^/]'
+    $regex = $regex -replace '§GLOBSTAR§/', '(?:.*/)?'
+    $regex = $regex -replace '§GLOBSTAR§', '.*'
+    
+    # 处理目录匹配和路径锚定
+    if ($pattern.EndsWith('/')) {
+        $regex = $regex.TrimEnd('/') + '(/.*)?'
+    } else {
+        $regex = $regex + '(/.*)?'
+    }
+    
+    if ($pattern.StartsWith('/')) {
+        $regex = '^' + $regex.Substring(1) + '$'
+    } elseif ($pattern.StartsWith('**/') -or -not $pattern.Contains('/')) {
+        $regex = if ($pattern.StartsWith('**/')) { '^' + $regex + '$' } else { '(^|/)' + $regex + '$' }
+    } else {
+        $regex = '^' + $regex + '$'
+    }
+    
+    $result = $path -match $regex
+    Write-Verbose "匹配检查: '$Path' vs '$Pattern' -> $result"
+    return $result
+}
+
+# 检查配置项是否应该被忽略
+function Test-ConfigIgnored {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$Link
+    )
+    
+    if (-not $script:Config) { $script:Config = Get-DotfilesConfig }
+    if (-not $script:Config.IgnoreList) { return $false }
+    
+    $shouldIgnore = $false
+    
+    # 按顺序处理所有模式，后面的规则覆盖前面的规则
+    foreach ($pattern in $script:Config.IgnoreList) {
+        if ([string]::IsNullOrWhiteSpace($pattern)) { continue }
+        
+        $isNegation = $pattern.StartsWith('!')
+        $actualPattern = if ($isNegation) { $pattern.Substring(1) } else { $pattern }
+        
+        if (Test-IgnorePattern -Path $Link.Source -Pattern $actualPattern) {
+            $shouldIgnore = -not $isNegation
+            Write-Verbose "配置项 '$($Link.Comment)' 匹配$(if ($isNegation) { '否定' } else { '忽略' })模式 '$pattern'"
+        }
+    }
+    
+    return $shouldIgnore
+}
+
 # 将JSONC内容转换为JSON对象
 function ConvertFrom-Jsonc {
     [CmdletBinding()]

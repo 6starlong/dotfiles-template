@@ -161,6 +161,13 @@ function Start-SyncProcess {
 
     # 收集所有冲突和无冲突项
     foreach ($link in $script:Config.Links) {
+        # 检查是否应该忽略此配置项
+        if (Test-ConfigIgnored -Link $link) {
+            Write-Host "    ⏩ 忽略: $($link.Comment)" -ForegroundColor Gray
+            $skippedCount++
+            continue
+        }
+
         Process-ConfigLink -Link $link -SyncedCount ([ref]$syncedCount) -SkippedCount ([ref]$skippedCount) -ConflictItems ([ref]$conflictItems)
     }
     

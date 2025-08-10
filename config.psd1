@@ -29,6 +29,13 @@
         TimestampFormat = "yyyy-MM-dd_HH-mm-ss"
     }
 
+    # 忽略列表配置
+    # 支持路径模式匹配，类似 .gitignore 的语法
+    # 匹配的配置项将被跳过，不会被安装、同步、状态检查和卸载
+    IgnoreList = @(
+        "cursor"
+    )
+
     # 转换配置 - 定义不同类型配置文件的转换规则
     TransformSettings = @{
         # MCP (Model Context Protocol) 配置转换规则
@@ -70,7 +77,7 @@
             Source    = "mcp\vscode\mcp.json"
             Target    = "test\vscode\mcp.json"
             Comment   = "VSCode MCP 配置"
-            Method    = "Copy"
+            Method    = "SymLink"
             Transform = "mcp:vscode"
         }
         @{

@@ -121,8 +121,11 @@ function Format-StatusLine {
     }
     
     # 对齐到固定位置
-    $padding = " " * ($fixedWidth - $width + 4)
-    return "$($Status.Icon) $comment$padding[$Method]  $($Status.Message)"
+    $commentPadding = " " * ($fixedWidth - $width + 2)
+    $methodFormatted = "[$Method]"
+    $methodPadding = " " * (10 - $methodFormatted.Length)
+    
+    return "$($Status.Icon) $comment$commentPadding$methodFormatted$methodPadding$($Status.Message)"
 }
 
 # 显示状态报告
@@ -141,6 +144,13 @@ function Show-StatusReport {
     }
     
     foreach ($link in $script:Config.Links) {
+        # 检查是否应该忽略此配置项
+        if (Test-ConfigIgnored -Link $link) {
+            $line = Format-StatusLine -Status @{Icon="⏩"; Message="已忽略"; Color="Gray"} -Link $link -Method "N/A"
+            Write-Host "    $line" -ForegroundColor Gray
+            continue
+        }
+
         $status = Get-ConfigStatus -Link $link
         $method = Get-Method -Link $link
         
