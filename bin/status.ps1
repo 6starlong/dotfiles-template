@@ -11,11 +11,11 @@ $script:Config = Get-DotfilesConfig
 # 检查单个配置的状态
 function Get-ConfigStatus {
     param([hashtable]$Link)
-    
+
     $targetPath = Resolve-ConfigPath -Path $Link.Target -DotfilesDir $script:DotfilesDir
     $sourcePath = Join-Path $script:DotfilesDir $Link.Source
     $method = Get-Method -Link $Link
-    
+
     # 检查目标文件是否存在
     if (-not (Test-Path $targetPath)) {
         return @{
@@ -25,7 +25,7 @@ function Get-ConfigStatus {
             Icon = "❌"
         }
     }
-    
+
     # 检查源文件是否存在
     if (-not (Test-Path $sourcePath)) {
         return @{
@@ -35,9 +35,9 @@ function Get-ConfigStatus {
             Icon = "⚠️"
         }
     }
-    
+
     $item = Get-Item $targetPath -Force
-    
+
     # 检查是否为符号链接
     if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
         $target = $item.Target
@@ -100,11 +100,11 @@ function Format-StatusLine {
         [hashtable]$Link,
         [string]$Method
     )
-    
+
     $fixedWidth = 32
     $comment = $Link.Comment
     $width = Get-DisplayWidth $comment
-    
+
     # 截断过长的注释
     if ($width -gt $fixedWidth) {
         $truncated = ""
@@ -119,12 +119,12 @@ function Format-StatusLine {
         $comment = $truncated + "..."
         $width = Get-DisplayWidth $comment
     }
-    
+
     # 对齐到固定位置
     $commentPadding = " " * ($fixedWidth - $width + 2)
     $methodFormatted = "[$Method]"
     $methodPadding = " " * (10 - $methodFormatted.Length)
-    
+
     return "$($Status.Icon) $comment$commentPadding$methodFormatted$methodPadding$($Status.Message)"
 }
 
@@ -142,7 +142,7 @@ function Show-StatusReport {
         OutOfSync = 0
         Error = 0
     }
-    
+
     foreach ($link in $script:Config.Links) {
         # 检查是否应该忽略此配置项
         if (Test-ConfigIgnored -Link $link) {
@@ -153,11 +153,11 @@ function Show-StatusReport {
 
         $status = Get-ConfigStatus -Link $link
         $method = Get-Method -Link $link
-        
+
         # 使用格式化函数生成状态行
         $line = Format-StatusLine -Status $status -Link $link -Method $method
         Write-Host "    $line" -ForegroundColor $status.Color
-        
+
         # 统计状态
         switch ($status.Status) {
             "Synced" { $statusCounts.Synced++ }

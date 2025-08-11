@@ -24,14 +24,14 @@ function Write-InstallResult {
         [string]$Message,
         [string]$Color = "White"
     )
-    
+
     # 显示到控制台
     if ($Message -eq "") {
         Write-Host ""
     } else {
         Write-Host "    $Message" -ForegroundColor $Color
     }
-    
+
     # 写入日志文件（仅提权模式）
     if ($LogFile) {
         try {
@@ -50,11 +50,11 @@ function Write-InstallResult {
 if (-not (Test-Administrator)) {
     Write-Host "    ⚠️ 需要管理员权限创建符号链接" -ForegroundColor Yellow
     Write-Host "    🔄 正在自动提权..." -ForegroundColor Cyan
-    
+
     try {
         # 创建临时日志文件
         $logFile = Join-Path $env:TEMP "dotfiles_install_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
-        
+
         # 启动提权进程
         $argumentList = @(
             "-NoProfile", "-ExecutionPolicy", "Bypass"
@@ -66,7 +66,7 @@ if (-not (Test-Administrator)) {
         }
         $process = Start-Process "PowerShell" -ArgumentList $argumentList -Verb RunAs -WindowStyle Hidden -PassThru
         $process.WaitForExit()
-        
+
         # 等待并读取结果
         $maxWait = 10
         $waited = 0
@@ -74,7 +74,7 @@ if (-not (Test-Administrator)) {
             Start-Sleep -Milliseconds 500
             $waited += 0.5
         }
-        
+
         if (Test-Path $logFile) {
             $results = Get-Content $logFile -Encoding UTF8 -ErrorAction SilentlyContinue
             if ($results -and $results.Count -gt 0) {
@@ -97,7 +97,7 @@ if (-not (Test-Administrator)) {
             Write-Host "    ❌ 安装过程中出现问题，未生成日志文件" -ForegroundColor Red
             Write-Host "    请手动以管理员身份运行: .\bin\install.ps1" -ForegroundColor Yellow
         }
-        
+
         Write-Host ""
         return
     } catch {

@@ -32,10 +32,10 @@ function Process-ConfigUninstall {
         Remove-Item $targetPath -Force -ErrorAction Stop
         Write-Host "    🔥 已移除: $($Link.Comment)" -ForegroundColor Green
         Write-Host "       $targetPath" -ForegroundColor Gray
-        
+
         # 清理空的父目录
         Remove-EmptyDirectories -FilePath $targetPath
-        
+
         $RemovedCount.Value++
     } catch {
         Write-Host "    ❌ 移除失败: $($Link.Comment)" -ForegroundColor Red

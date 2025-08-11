@@ -1,0 +1,10 @@
+{
+  "servers": {
+    "Context7": {
+      "command": "pnpx",
+      "args": [
+        "@upstash/context7-mcp@latest"
+      ]
+    }
+  }
+}

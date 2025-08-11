@@ -1,0 +1,38 @@
+# SSH 客户端配置文件
+# 使用此文件简化你的 SSH 连接命令
+
+# ---- 示例: GitHub ----
+# 强制使用指定的私钥连接 GitHub
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_rsa_github
+
+# ---- 示例: 工作服务器 ----
+# 将 `ssh work-server` 映射到完整的连接信息
+Host work-server
+  HostName 192.168.1.100
+  User your_username
+  Port 2222
+  IdentityFile ~/.ssh/id_rsa_work
+
+# ---- 示例: 个人服务器 ----
+Host personal-vps
+  HostName my-vps-domain.com
+  User root
+  IdentityFile ~/.ssh/id_rsa_personal
+
+# ---- 通用设置 ----
+# 对所有主机应用这些设置
+Host *
+  # 启用连接复用，加快后续连接速度
+  ControlMaster auto
+  ControlPath ~/.ssh/sockets/%r@%h-%p
+  ControlPersist 600s
+
+  # 禁用密码验证，强制使用密钥
+  PasswordAuthentication no
+
+  # 保持连接活动
+  ServerAliveInterval 60
+  ServerAliveCountMax 3

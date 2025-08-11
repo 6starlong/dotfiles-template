@@ -1,0 +1,25 @@
+# Global .gitignore
+
+# 操作系统生成的文件
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# 编辑器和 IDE 的用户特定设置
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
+*.swp
+
+# 日志和临时文件
+*.log
+*.tmp
+*.bak
+*.temp
+
+# 敏感文件 (作为最后的防线)
+.env
+*secret*
+*.key

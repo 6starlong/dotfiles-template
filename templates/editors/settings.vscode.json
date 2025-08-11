@@ -1,0 +1,11 @@
+{
+  // VS Code specific settings
+  "workbench.colorTheme": "Catppuccin Mocha",
+  "workbench.iconTheme": "catppuccin-mocha",
+
+  // 从最终结果中移除的键
+  "$excludeFields": [
+    "editor.wordWrap",
+    "editor.wordWrapColumn"
+  ]
+}

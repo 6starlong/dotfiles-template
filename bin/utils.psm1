@@ -9,12 +9,12 @@ $script:DotfilesDir = Split-Path $PSScriptRoot -Parent
 function Get-Method {
     [CmdletBinding()]
     param([hashtable]$Link)
-    
+
     # 如果需要配置文件，先加载
     if (-not $script:Config) {
         $script:Config = Get-DotfilesConfig
     }
-    
+
     $method = if ($Link.Method) { $Link.Method } else { $script:Config.DefaultMethod }
     if ($method) { return $method } else { return "SymLink" }
 }
@@ -23,12 +23,12 @@ function Get-Method {
 function Get-DotfilesConfig {
     [CmdletBinding()]
     param()
-    
+
     $configFile = Join-Path $script:DotfilesDir "config.psd1"
     if (-not (Test-Path $configFile)) {
         throw "配置文件未找到: $configFile"
     }
-    
+
     return Import-PowerShellDataFile $configFile
 }
 
@@ -38,20 +38,20 @@ function Test-IgnorePattern {
     param(
         [Parameter(Mandatory)]
         [string]$Path,
-        
+
         [Parameter(Mandatory)]
         [string]$Pattern
     )
-    
+
     if ([string]::IsNullOrWhiteSpace($Pattern)) { return $false }
-    
+
     # 标准化路径分隔符
     $path = $Path -replace '\\', '/'
     $pattern = $Pattern -replace '\\', '/'
-    
+
     # 构建正则表达式
     $regex = $pattern
-    
+
     # 转义正则表达式特殊字符（保留 * 和 ?）
     $regex = $regex -replace '\.', '\.'
     $regex = $regex -replace '\+', '\+'
@@ -64,21 +64,21 @@ function Test-IgnorePattern {
     $regex = $regex -replace '\^', '\^'
     $regex = $regex -replace '\$', '\$'
     $regex = $regex -replace '\|', '\|'
-    
+
     # 处理通配符：先处理 **，再处理 *
     $regex = $regex -replace '\*\*', '§GLOBSTAR§'
     $regex = $regex -replace '\*', '[^/]*'
     $regex = $regex -replace '\?', '[^/]'
     $regex = $regex -replace '§GLOBSTAR§/', '(?:.*/)?'
     $regex = $regex -replace '§GLOBSTAR§', '.*'
-    
+
     # 处理目录匹配和路径锚定
     if ($pattern.EndsWith('/')) {
         $regex = $regex.TrimEnd('/') + '(/.*)?'
     } else {
         $regex = $regex + '(/.*)?'
     }
-    
+
     if ($pattern.StartsWith('/')) {
         $regex = '^' + $regex.Substring(1) + '$'
     } elseif ($pattern.StartsWith('**/') -or -not $pattern.Contains('/')) {
@@ -86,7 +86,7 @@ function Test-IgnorePattern {
     } else {
         $regex = '^' + $regex + '$'
     }
-    
+
     $result = $path -match $regex
     Write-Verbose "匹配检查: '$Path' vs '$Pattern' -> $result"
     return $result
@@ -99,25 +99,25 @@ function Test-ConfigIgnored {
         [Parameter(Mandatory)]
         [hashtable]$Link
     )
-    
+
     if (-not $script:Config) { $script:Config = Get-DotfilesConfig }
     if (-not $script:Config.IgnoreList) { return $false }
-    
+
     $shouldIgnore = $false
-    
+
     # 按顺序处理所有模式，后面的规则覆盖前面的规则
     foreach ($pattern in $script:Config.IgnoreList) {
         if ([string]::IsNullOrWhiteSpace($pattern)) { continue }
-        
+
         $isNegation = $pattern.StartsWith('!')
         $actualPattern = if ($isNegation) { $pattern.Substring(1) } else { $pattern }
-        
+
         if (Test-IgnorePattern -Path $Link.Source -Pattern $actualPattern) {
             $shouldIgnore = -not $isNegation
             Write-Verbose "配置项 '$($Link.Comment)' 匹配$(if ($isNegation) { '否定' } else { '忽略' })模式 '$pattern'"
         }
     }
-    
+
     return $shouldIgnore
 }
 
@@ -128,7 +128,7 @@ function ConvertFrom-Jsonc {
         [Parameter(Mandatory, ValueFromPipeline)]
         [string]$Content
     )
-    
+
     process {
         # 移除块注释和行注释
         $cleanContent = $Content -replace '(?s)/\*.*?\*/' -replace '(?m)//.*$'
@@ -144,36 +144,36 @@ function Format-JsonClean {
         [string]$JsonString,
         [int]$Indent = 2
     )
-    
+
     # 清理多余空格和空行
     $cleanJson = $JsonString -replace '\s*:\s*\[\s*\]', ': []' `
                               -replace '\s*:\s*\{\s*\}', ': {}' `
                               -replace ':\s+(["\d\[\{tfn])', ': $1' `
                               -replace '(?m)^\s*$\n', ''
-    
+
     # 重新格式化缩进
     $lines = $cleanJson -split "`r?`n"
     $result = [System.Collections.Generic.List[string]]::new()
     $currentIndent = 0
-    
+
     foreach ($line in $lines) {
         $trimmed = $line.Trim()
         if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
-        
+
         # 调整缩进级别
         if ($trimmed.StartsWith('}') -or $trimmed.StartsWith(']')) {
             $currentIndent = [Math]::Max(0, $currentIndent - 1)
         }
-        
+
         # 添加正确缩进的行
         $result.Add((' ' * ($currentIndent * $Indent)) + $trimmed)
-        
+
         # 为下一行调整缩进
         if ($trimmed.EndsWith('{') -or $trimmed.EndsWith('[')) {
             $currentIndent++
         }
     }
-    
+
     return $result -join [System.Environment]::NewLine
 }
 
@@ -183,40 +183,40 @@ function Resolve-ConfigPath {
     param(
         [Parameter(Mandatory)]
         [string]$Path,
-        
+
         [Parameter(Mandatory)]
         [string]$DotfilesDir,
-        
+
         [switch]$ToRelative
     )
-    
+
     if ($ToRelative) {
         # 转换为相对路径模式
         $baseConfigRelPath = $Path
-        
+
         # 如果是绝对路径，转换为相对路径
         if ([System.IO.Path]::IsPathRooted($Path)) {
             $sourceFullPath = [System.IO.Path]::GetFullPath($Path)
             $dotfilesFullPath = [System.IO.Path]::GetFullPath($DotfilesDir)
-            
+
             if ($sourceFullPath.StartsWith($dotfilesFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
                 $baseConfigRelPath = $sourceFullPath.Substring($dotfilesFullPath.Length).TrimStart('\', '/')
             } else {
                 $baseConfigRelPath = $sourceFullPath
             }
         }
-        
+
         return $baseConfigRelPath
     } else {
         # 转换为绝对路径模式（默认）
         # 展开环境变量
         $resolvedPath = $Path -replace '\{USERPROFILE\}', $env:USERPROFILE
-        
+
         # 如果是相对路径，则相对于 dotfiles 根目录
         if (-not [System.IO.Path]::IsPathRooted($resolvedPath)) {
             $resolvedPath = Join-Path $DotfilesDir $resolvedPath
         }
-        
+
         return $resolvedPath
     }
 }
@@ -230,18 +230,18 @@ function Get-TransformConfig {
         [Parameter(Mandatory)]
         [string]$Format
     )
-    
+
     # 加载配置文件
     $configFile = Join-Path $script:DotfilesDir "config.psd1"
     if (-not (Test-Path $configFile)) {
         throw "配置文件未找到: $configFile"
     }
-    
+
     $config = Import-PowerShellDataFile $configFile
     if (-not $config.TransformSettings.ContainsKey($Format)) {
         throw "转换配置未找到: $Format"
     }
-    
+
     return $config.TransformSettings[$Format]
 }
 
@@ -252,11 +252,11 @@ function Read-JsonConfig {
         [Parameter(Mandatory)]
         [string]$Path
     )
-    
+
     if (-not (Test-Path $Path)) {
         return [psobject]@{}
     }
-    
+
     try {
         $content = Get-Content $Path -Raw -Encoding UTF8
         if ([string]::IsNullOrWhiteSpace($content)) {
@@ -276,7 +276,7 @@ function Get-ExistingConfig {
         [Parameter(Mandatory)]
         [string]$TargetFile
     )
-    
+
     try {
         $existingContent = Get-Content $TargetFile -Raw -Encoding UTF8
         if ($existingContent -and $existingContent.Trim()) {
@@ -285,7 +285,7 @@ function Get-ExistingConfig {
     } catch {
         Write-Verbose "无法读取现有配置文件，将创建新文件: $($_.Exception.Message)"
     }
-    
+
     return $null
 }
 
@@ -296,7 +296,7 @@ function Restore-UnicodeCharacters {
         [Parameter(Mandatory)]
         [string]$JsonString
     )
-    
+
     # 处理Unicode转义字符（直接替换常用字符）
     $result = $JsonString
     foreach ($pair in @(
@@ -311,7 +311,7 @@ function Restore-UnicodeCharacters {
     )) {
         $result = $result -replace $pair[0], $pair[1]
     }
-    
+
     return $result
 }
 
@@ -321,26 +321,26 @@ function Write-OutputFile {
     param(
         [Parameter(Mandatory)]
         [psobject]$Content,
-        
+
         [Parameter(Mandatory)]
         [string]$TargetFile
     )
-    
+
     # 生成最终JSON
     $rawJson = $Content | ConvertTo-Json -Depth 100 -Compress:$false
-    
+
     # 反转义Unicode字符
     $unescapedJson = Restore-UnicodeCharacters -JsonString $rawJson
-    
+
     # 清理格式
     $finalJson = Format-JsonClean -JsonString $unescapedJson -Indent 2
-    
+
     # 确保输出目录存在
     $outputDir = Split-Path $TargetFile -Parent
     if ($outputDir -and -not (Test-Path $outputDir)) {
         New-Item -Path $outputDir -ItemType Directory -Force | Out-Null
     }
-    
+
     # 写入文件
     [System.IO.File]::WriteAllText($TargetFile, ($finalJson + [System.Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
 }
@@ -376,27 +376,27 @@ function Merge-JsonObjects {
     param(
         [Parameter(Mandatory)]
         [psobject]$Base,
-        
+
         [Parameter(Mandatory)]
         [psobject]$Override
     )
-    
+
     # 创建一个新的PSCustomObject作为结果
     $result = [pscustomobject]@{}
-    
+
     # 复制基础对象的属性
     foreach ($property in $Base.PSObject.Properties) {
         if ($property.MemberType -eq 'NoteProperty') {
             $result | Add-Member -MemberType NoteProperty -Name $property.Name -Value $property.Value
         }
     }
-    
+
     foreach ($property in $Override.PSObject.Properties) {
         $key = $property.Name
         $value = $property.Value
-        
-        if ($result.PSObject.Properties[$key] -and 
-            $result.$key -is [psobject] -and 
+
+        if ($result.PSObject.Properties[$key] -and
+            $result.$key -is [psobject] -and
             $value -is [psobject] -and
             $result.$key.GetType().Name -eq 'PSCustomObject' -and
             $value.GetType().Name -eq 'PSCustomObject') {
@@ -411,7 +411,7 @@ function Merge-JsonObjects {
             }
         }
     }
-    
+
     return $result
 }
 
@@ -423,14 +423,14 @@ function Get-LayeredConfig {
     param(
         [Parameter(Mandatory)]
         [string]$BaseConfigPath,
-        
+
         [Parameter()]
         [array]$Layers = @(),
-        
+
         [Parameter()]
         [ref]$TransformConfig
     )
-    
+
     # 1. 从基础配置开始
     $baseFullPath = Join-Path $script:DotfilesDir $BaseConfigPath
     if (Test-Path $baseFullPath) {
@@ -440,36 +440,36 @@ function Get-LayeredConfig {
         Write-Verbose "基础配置不存在: $baseFullPath"
         $mergedConfig = [psobject]@{}
     }
-    
+
     # 初始化排除字段收集器
     $excludeFields = @()
-    
+
     # 2. 按顺序合并额外配置层
     foreach ($layerPath in $Layers) {
         $fullPath = Join-Path $script:DotfilesDir $layerPath
-        
+
         if (Test-Path $fullPath) {
             $layerConfig = Read-JsonConfig -Path $fullPath
-            
+
             # 提取并收集排除字段
             if ($layerConfig.'$excludeFields') {
                 $excludeFields += $layerConfig.'$excludeFields'
                 $layerConfig.PSObject.Properties.Remove('$excludeFields')
                 Write-Verbose "收集到排除字段: $($layerConfig.'$excludeFields' -join ', ')"
             }
-            
+
             $mergedConfig = Merge-JsonObjects -Base $mergedConfig -Override $layerConfig
             Write-Verbose "已合并额外配置层: $fullPath"
         } else {
             Write-Verbose "额外配置层不存在，跳过: $fullPath"
         }
     }
-    
+
     # 返回收集到的排除字段
     if ($TransformConfig) {
         $TransformConfig.Value = $excludeFields | Select-Object -Unique
     }
-    
+
     return $mergedConfig
 }
 
@@ -479,31 +479,31 @@ function Invoke-LayeredTransform {
     param(
         [Parameter(Mandatory)]
         [psobject]$Config,
-        
+
         [Parameter(Mandatory)]
         [string]$Platform,
-        
+
         [Parameter(Mandatory)]
         [string]$SourceFile,
-        
+
         [Parameter(Mandatory)]
         [string]$TargetFile,
-        
+
         [switch]$Overwrite
     )
-    
+
     $platformConfig = $Config.Layered.$Platform
     if (-not $platformConfig) {
         throw "分层配置未找到平台 '$Platform' 的配置层定义"
     }
-    
+
     # 计算相对路径
     $baseConfigRelPath = Resolve-ConfigPath -Path $SourceFile -DotfilesDir (Split-Path $PSScriptRoot -Parent) -ToRelative
-    
+
     # 获取分层合并配置，同时收集排除字段
     $excludeFields = $null
     $mergedConfig = Get-LayeredConfig -BaseConfigPath $baseConfigRelPath -Layers $platformConfig -TransformConfig ([ref]$excludeFields)
-    
+
     # 如果不是强制覆盖模式，合并现有用户配置
     if (-not $Overwrite -and (Test-Path $TargetFile)) {
         $existingConfig = Get-ExistingConfig -TargetFile $TargetFile
@@ -511,13 +511,13 @@ function Invoke-LayeredTransform {
             $mergedConfig = Merge-JsonObjects -Base $existingConfig -Override $mergedConfig
         }
     }
-    
+
     # 应用排除字段
     if ($excludeFields -and $excludeFields.Count -gt 0) {
         Write-Verbose "应用排除字段: $($excludeFields -join ', ')"
         $mergedConfig = Remove-ExcludedFields -Config $mergedConfig -ExcludeFields $excludeFields
     }
-    
+
     return $mergedConfig
 }
 
@@ -530,9 +530,9 @@ function Remove-EmptyDirectories {
         [Parameter(Mandatory)]
         [string]$FilePath
     )
-    
+
     $parentDir = Split-Path $FilePath -Parent
-    
+
     # 递归向上清理空目录，直到遇到非空目录或到达根目录
     while ($parentDir -and (Test-Path $parentDir)) {
         try {
@@ -560,18 +560,18 @@ function Remove-ExcludedFields {
     param(
         [Parameter(Mandatory)]
         [psobject]$Config,
-        
+
         [Parameter(Mandatory)]
         [array]$ExcludeFields
     )
-    
+
     if (-not $ExcludeFields -or $ExcludeFields.Count -eq 0) {
         return $Config
     }
-    
+
     # 创建新的配置对象
     $result = [pscustomobject]@{}
-    
+
     # 复制所有不在排除列表中的属性
     foreach ($property in $Config.PSObject.Properties) {
         if ($property.MemberType -eq 'NoteProperty') {
@@ -591,14 +591,14 @@ function Get-SourceFields {
     param(
         [Parameter(Mandatory)]
         [psobject]$Config,
-        
+
         [Parameter(Mandatory)]
         [string]$Platform,
-        
+
         [Parameter(Mandatory)]
         [string]$SourceFile
     )
-    
+
     # 步骤 1: 收集所有源文件的字段名
     $allSourceFields = @()
 
@@ -632,7 +632,7 @@ function Get-SourceFields {
     } else {
         $Config.DefaultField
     }
-    
+
     # 如果没有定义有效的映射规则，直接返回源字段
     if (-not $defaultField -or -not $platformField -or $defaultField -eq $platformField) {
         return $allSourceFields | Select-Object -Unique
@@ -649,7 +649,7 @@ function Get-SourceFields {
             $allTargetFields += $sourceFieldName
         }
     }
-    
+
     return $allTargetFields | Select-Object -Unique
 }
 
@@ -659,39 +659,39 @@ function Remove-ConfigFields {
     param(
         [Parameter(Mandatory)]
         [string]$TargetFile,
-        
+
         [Parameter(Mandatory)]
         [array]$FieldsToRemove
     )
-    
+
     # 如果没有要移除的字段，直接返回
     if (-not $FieldsToRemove -or $FieldsToRemove.Count -eq 0) {
         Write-Verbose "没有要移除的字段，跳过操作"
         return
     }
-    
+
     # 读取目标文件
     if (-not (Test-Path $TargetFile)) {
         Write-Warning "目标文件不存在: $TargetFile"
         return
     }
-    
+
     try {
         $targetContent = Get-Content $TargetFile -Raw -Encoding UTF8
         if (-not $targetContent -or -not $targetContent.Trim()) {
             Write-Warning "目标文件为空: $TargetFile"
             return
         }
-        
+
         $targetObject = ConvertFrom-Jsonc -Content $targetContent
         if (-not $targetObject) {
             Write-Warning "无法解析目标文件: $TargetFile"
             return
         }
-        
+
         # 记录移除的字段
         $removedFields = @()
-        
+
         # 移除指定的字段
         foreach ($fieldName in $FieldsToRemove) {
             if ($targetObject.PSObject.Properties[$fieldName]) {
@@ -700,31 +700,31 @@ function Remove-ConfigFields {
                 Write-Verbose "已移除字段: $fieldName"
             }
         }
-        
+
         # 如果没有移除任何字段，提示用户
         if ($removedFields.Count -eq 0) {
             Write-Warning "未找到要移除的字段: $($FieldsToRemove -join ', ')"
             return
         }
-        
+
         # 检查移除字段后对象是否为空
         $remainingProperties = @($targetObject.PSObject.Properties | Where-Object { $_.MemberType -eq 'NoteProperty' })
-        
+
         if ($remainingProperties.Count -eq 0) {
             # 如果对象为空，直接删除文件
             Remove-Item -Path $TargetFile -Force
             Write-Verbose "对象为空，已删除文件: $TargetFile"
-            
+
             # 检查并删除空文件夹
             Remove-EmptyDirectories -FilePath $TargetFile
-            
+
             Write-Verbose "成功移除 $($removedFields.Count) 个字段: $($removedFields -join ', ')"
         } else {
             # 写回文件
             Write-OutputFile -Content $targetObject -TargetFile $TargetFile
             Write-Verbose "成功移除 $($removedFields.Count) 个字段: $($removedFields -join ', ')"
         }
-        
+
     } catch {
         throw "移除配置字段失败: $($_.Exception.Message)"
     }

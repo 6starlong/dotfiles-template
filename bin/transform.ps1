@@ -55,20 +55,20 @@ function Write-TransformResult {
 # 执行移除任务
 function Invoke-RemoveTask {
     param($Task, [string]$SourceFile, [string]$TargetFile)
-    
+
     # 检查目标文件是否存在
     if (-not (Test-Path $TargetFile)) {
         Write-TransformResult "⚠️ 目标文件不存在，跳过: $($Task.TargetFile)" "Yellow"
         return $false
     }
-    
+
     try {
         Write-TransformResult "🗑️ 移除: $($Task.Comment)" "Cyan"
         Write-TransformResult "   从 $($Task.TargetFile) 移除相关配置" "Gray"
-        
+
         # 执行移除操作
         Invoke-FileRemove -SourceFile $SourceFile -TargetFile $TargetFile -TransformType $Task.TransformType
-        
+
         return $true
     }
     catch {
@@ -81,40 +81,40 @@ function Invoke-RemoveTask {
 # 执行单个转换任务
 function Invoke-TransformTask {
     param($Task)
-    
+
     $sourceFullPath = Join-Path $script:DotfilesDir $Task.SourceFile
     $targetFullPath = Join-Path $script:DotfilesDir $Task.TargetFile
-    
+
     # 如果是移除模式
     if ($Remove) {
         return Invoke-RemoveTask -Task $Task -SourceFile $sourceFullPath -TargetFile $targetFullPath
     }
-    
+
     # 检查源文件是否存在
     if (-not (Test-Path $sourceFullPath)) {
         Write-TransformResult "⚠️ 源文件不存在，跳过: $($Task.SourceFile)" "Yellow"
         return $false
     }
-    
+
     # 检查是否需要覆盖
     if ((Test-Path $targetFullPath) -and -not $Force) {
         Write-TransformResult "⏩ 文件已存在，跳过: $($Task.TargetFile) (使用 -Force 强制覆盖)" "Yellow"
         return $false
     }
-    
+
     try {
         Write-TransformResult "🔄 生成: $($Task.Comment)" "Cyan"
         Write-TransformResult "   $($Task.SourceFile) -> $($Task.TargetFile)" "Gray"
-        
+
         # 确保目标目录存在
         $targetDir = Split-Path $targetFullPath -Parent
         if (-not (Test-Path $targetDir)) {
             New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
         }
-        
+
         # 执行转换
         Invoke-FileTransform -SourceFile $sourceFullPath -TargetFile $targetFullPath -TransformType $Task.TransformType
-        
+
         return $true
     }
     catch {
@@ -127,7 +127,7 @@ function Invoke-TransformTask {
 # 核心移除逻辑
 function Invoke-FileRemove {
     param([string]$SourceFile, [string]$TargetFile, [string]$TransformType)
-    
+
     # 解析转换类型参数
     $parts = $TransformType -split ":"
     if ($parts.Length -ne 2) {
@@ -138,10 +138,10 @@ function Invoke-FileRemove {
 
     # 获取配置
     $config = Get-TransformConfig -Format $format
-    
+
     # 获取要移除的字段列表
     $fieldsToRemove = Get-SourceFields -Config $config -Platform $platform -SourceFile $SourceFile
-    
+
     # 从目标文件移除字段
     Remove-ConfigFields -TargetFile $TargetFile -FieldsToRemove $fieldsToRemove
 }
@@ -149,7 +149,7 @@ function Invoke-FileRemove {
 # 核心转换逻辑
 function Invoke-FileTransform {
     param([string]$SourceFile, [string]$TargetFile, [string]$TransformType)
-    
+
     # 解析转换类型参数
     $parts = $TransformType -split ":"
     if ($parts.Length -ne 2) {
@@ -160,7 +160,7 @@ function Invoke-FileTransform {
 
     # 获取配置
     $config = Get-TransformConfig -Format $format
-    
+
     # 检查是否支持分层合并
     if ($config.Layered -and $config.Layered.$platform) {
         $sourceObject = Invoke-LayeredTransform -Config $config -Platform $platform -SourceFile $SourceFile -TargetFile $TargetFile -Overwrite:$true
@@ -169,7 +169,7 @@ function Invoke-FileTransform {
         $sourceContent = Get-Content $SourceFile -Raw -Encoding UTF8
         $sourceObject = ConvertFrom-Jsonc -Content $sourceContent
     }
-    
+
     # 字段映射转换
     $defaultField = $config.DefaultField
     $platformField = $config.DefaultField
@@ -180,10 +180,10 @@ function Invoke-FileTransform {
     if ($defaultField -and $platformField -and $defaultField -ne $platformField) {
         $sourceKey = $defaultField
         $targetKey = $platformField
-        
+
         if ($sourceObject.psobject.Properties.Name -contains $sourceKey) {
             $dataToTransform = $sourceObject.$sourceKey
-            
+
             $orderedResult = [pscustomobject]@{}
             foreach ($prop in $sourceObject.psobject.Properties) {
                 if ($prop.Name -eq $sourceKey) {
@@ -201,7 +201,7 @@ function Invoke-FileTransform {
     if (Test-Path $TargetFile) {
         try {
             $targetContent = Get-Content $TargetFile -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
-            if ($targetContent -and $targetContent.Trim()) { 
+            if ($targetContent -and $targetContent.Trim()) {
                 $targetObject = ConvertFrom-Jsonc -Content $targetContent
                 if ($targetObject) {
                     $resultObject = $targetObject
@@ -221,32 +221,32 @@ function Invoke-FileTransform {
 # 收集转换任务
 function Get-TransformTasks {
     param([string]$FilterType)
-    
+
     $tasks = @()
-    
+
     # 精确匹配：类型:平台
     if ($FilterType -and $FilterType.Contains(":")) {
         $parts = $FilterType -split ":"
         $configType = $parts[0]
         $platform = $parts[1]
-        
+
         if (-not $script:Config.TransformSettings.ContainsKey($configType)) {
             return @()
         }
-        
+
         $setting = $script:Config.TransformSettings[$configType]
-        
+
         # 检查平台支持
         if ($setting.Layered -and $setting.Layered.Count -gt 0 -and -not $setting.Layered.ContainsKey($platform)) {
             Write-TransformResult "❌ 配置类型 '$configType' 不支持平台 '$platform'" "Red"
             return @()
         }
-        
+
         # 优先查找带 Transform 标识的 Link 配置
         $matchingLinks = $script:Config.Links | Where-Object {
             $_.Method -eq "Copy" -and $_.Transform -eq $FilterType
         }
-        
+
         if ($matchingLinks) {
             foreach ($link in $matchingLinks) {
                 $tasks += @{
@@ -275,8 +275,8 @@ function Get-TransformTasks {
                     if ($transformParts.Length -eq 2) {
                         $configType = $transformParts[0]
                         $platform = $transformParts[1]
-                        
-                        if ($script:Config.TransformSettings.ContainsKey($configType) -and 
+
+                        if ($script:Config.TransformSettings.ContainsKey($configType) -and
                             (-not $FilterType -or $configType -eq $FilterType)) {
                             $setting = $script:Config.TransformSettings[$configType]
                             $tasks += @{
@@ -291,7 +291,7 @@ function Get-TransformTasks {
             }
         }
     }
-    
+
     return $tasks
 }
 #endregion

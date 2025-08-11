@@ -1,0 +1,36 @@
+{
+  // =================================================================
+  // Base Settings (通用基础配置)
+  // 适用于所有编辑器的通用配置，作为各编辑器配置的基础。
+  // =================================================================
+
+  // ---- Workbench (工作台) ----
+  "workbench.colorTheme": "Default Dark+",
+  "workbench.iconTheme": "vscode-icons",
+  "workbench.secondarySideBar.showLabels": false,
+
+  // ---- Editor (编辑器) ----
+  "editor.fontFamily": "Fira Code, monospace",
+  "editor.fontSize": 16,
+  "editor.tabSize": 2,
+  "editor.wordWrap": "bounded",
+  "editor.wordWrapColumn": 120,
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit",
+    "source.organizeImports": "never"
+  },
+
+  // ---- Files (文件) ----
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+  "files.trimTrailingWhitespace": true,
+
+  // ---- Terminal (集成终端) ----
+  "terminal.integrated.fontFamily": "FiraCode Nerd Font",
+  "terminal.integrated.cursorStyle": "underline",
+  "terminal.integrated.cursorStyleInactive": "underline",
+  "terminal.integrated.cursorBlinking": true
+
+  // ...
+}

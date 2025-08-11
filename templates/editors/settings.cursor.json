@@ -1,0 +1,10 @@
+{
+  // Cursor specific settings
+  "workbench.colorTheme": "Cursor Dark",
+  "workbench.activityBar.orientation": "vertical",
+
+  // 从最终结果中移除的键
+  "$excludeFields": [
+    "workbench.secondarySideBar.showLabels"
+  ]
+}

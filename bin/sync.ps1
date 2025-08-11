@@ -35,20 +35,20 @@ function Invoke-VSCodeDiff {
 # 处理单个文件同步
 function Process-SingleFileSync {
     param([object]$ConflictItem)
-    
+
     Write-Host ""
     Write-Host "    ----------------------------------------------------------------" -ForegroundColor Gray
     Write-Host ""
     Write-Host "    📄 需要同步: $($ConflictItem.Link.Comment)" -ForegroundColor Blue
     Write-Host "    $($ConflictItem.TargetPath) → $($ConflictItem.SourcePath)" -ForegroundColor Gray
-    
+
     # 如果源文件不存在，直接复制
     if (-not (Test-Path $ConflictItem.SourcePath)) {
         Copy-Item $ConflictItem.TargetPath $ConflictItem.SourcePath -Force
         Write-Host "    ✅ 已复制: $($ConflictItem.Link.Comment)" -ForegroundColor Green
         return $true
     }
-    
+
     Write-Host ""
     Write-Host "    选择操作:" -ForegroundColor Yellow
     Write-Host "    [Enter] VS Code 差异合并 (默认)" -ForegroundColor Cyan
@@ -56,8 +56,9 @@ function Process-SingleFileSync {
     Write-Host "    [2] 跳过此文件" -ForegroundColor White
     Write-Host ""
     Write-Host -NoNewline "    选择 ([Enter]/1/2) : "
+    Write-Host ""
     $choice = Read-Host
-    
+
     switch ($choice) {
         "1" {
             Copy-Item $ConflictItem.TargetPath $ConflictItem.SourcePath -Force
@@ -141,7 +142,7 @@ function Process-Conflicts {
 
     foreach ($item in $ConflictItems) {
         $result = Process-SingleFileSync -ConflictItem $item
-        
+
         if ($result) {
             $SyncedCount.Value++
         } else {
@@ -170,7 +171,7 @@ function Start-SyncProcess {
 
         Process-ConfigLink -Link $link -SyncedCount ([ref]$syncedCount) -SkippedCount ([ref]$skippedCount) -ConflictItems ([ref]$conflictItems)
     }
-    
+
     # 处理冲突
     Process-Conflicts -ConflictItems $conflictItems -SyncedCount ([ref]$syncedCount) -SkippedCount ([ref]$skippedCount)
 

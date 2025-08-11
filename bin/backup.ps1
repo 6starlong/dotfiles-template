@@ -173,7 +173,7 @@ function Restore-FromBackup {
     Write-Host ""
     Write-Host "    🔄 从备份恢复: $($selectedBackup.Name)" -ForegroundColor Yellow
     Write-Host ""
-    
+
     # 恢复文件
     $restoredCount = 0
     foreach ($link in $script:Config.Links) {
@@ -249,10 +249,10 @@ function Clean-OldBackups {
 
 # 自动清理旧备份（内部使用）
 function Clean-OldBackupsAuto {
-    $allBackups = Get-ChildItem -Path $script:BackupBaseDir -Directory | 
+    $allBackups = Get-ChildItem -Path $script:BackupBaseDir -Directory |
                   Where-Object { $_.Name -match "^backup_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$" } |
                   Sort-Object CreationTime -Descending
-    
+
     if ($allBackups.Count -gt $script:BackupSettings.MaxBackups) {
         $toDelete = $allBackups | Select-Object -Skip $script:BackupSettings.MaxBackups
         foreach ($oldBackup in $toDelete) {

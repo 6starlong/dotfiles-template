@@ -30,78 +30,106 @@
     }
 
     # 忽略列表配置
-    # 支持路径模式匹配，类似 .gitignore 的语法
-    # 匹配的配置项将被跳过，不会被安装、同步、状态检查和卸载
+    # 用于在部署时，跳过那些在 Links 中已定义、但当前不希望同步的配置项。
+    # 支持 .gitignore 语法。
     IgnoreList = @(
-        "cursor"
+        # 按完整路径忽略单个文件
+        # "configs/local.settings.json"
+
+        # 按目录忽略
+        # "configs/linux/**"
+
+        # 按通配符模式忽略
+        "**/*secret*"
+
+        # 否定模式 (即使上层目录被忽略，也强制部署此文件)
+        # "!configs/linux/important.conf"
     )
 
     # 转换配置 - 定义不同类型配置文件的转换规则
     TransformSettings = @{
-        # MCP (Model Context Protocol) 配置转换规则
-        "mcp" = @{
-            # 源文件路径
-            SourceFile = "mcp\servers.json"
-            # 默认字段名（当平台未在 Platforms 中定义时使用）
-            DefaultField = "mcpServers"
-            # 平台特定的字段映射
-            Platforms = @{
-                "vscode" = "servers"      # VSCode 使用 servers 字段
+        # 编辑器分层配置
+        "editor" = @{
+            SourceFile = "templates\editors\settings.base.json"
+            Layered = @{
+                "vscode" = @("templates\editors\settings.vscode.json")
+                "cursor" = @("templates\editors\settings.cursor.json")
             }
         }
-        
-        # 编辑器配置分层合并规则
-        "editor" = @{
-            # 源文件路径
-            SourceFile = "editors\template\base-settings.json"
-            # 使用 Layered 字段定义分层合并规则
-            Layered = @{
-                "vscode" = @("editors\template\vscode-settings.json")
-                "cursor" = @("editors\template\cursor-settings.json")
+        # MCP 服务器列表字段映射
+        "mcp" = @{
+            SourceFile   = "templates\mcp\servers.json"
+            DefaultField = "mcpServers"
+            Platforms    = @{
+                vscode = "servers" # 将 mcpServers 映射为 VS Code MCP 所需的 servers
             }
         }
     }
 
     # 配置链接 - 定义源文件到目标位置的映射关系
     Links = @(
-        # 配置项格式说明：
-        # @{
-        #     Source    = "path\to\source.ext"                # 源文件路径
-        #     Target    = "{USERPROFILE}\path\to\target.ext"  # 目标路径
-        #     Comment   = "Config description"                # 配置描述
-        #     Method    = "SymLink"                           # 部署方法
-        # }
-
-        # ==================== MCP 配置文件 ====================
+        # ---- 版本控制 ----
         @{
-            Source    = "mcp\vscode\mcp.json"
-            Target    = "test\vscode\mcp.json"
-            Comment   = "VSCode MCP 配置"
+            Source    = "configs\git\.gitconfig"
+            Target    = "{USERPROFILE}\.gitconfig"
+            Comment   = "Git 全局配置"
             Method    = "SymLink"
-            Transform = "mcp:vscode"
-        }
+        },
         @{
-            Source    = "mcp\cursor\mcp.json"
-            Target    = "test\cursor\mcp.json"
-            Comment   = "Cursor MCP 配置"
-            Method    = "Copy"
-            Transform = "mcp:cursor"
-        }
+            Source    = "configs\git\.gitignore_global"
+            Target    = "{USERPROFILE}\.gitignore_global"
+            Comment   = "Git 全局忽略文件"
+            Method    = "SymLink"
+        },
 
-        # ==================== 编辑器配置文件 ====================
+        # ---- Shell 与终端 ----
         @{
-            Source    = "editors\vscode\settings.json"
-            Target    = "test\vscode\settings.json"
-            Comment   = "VSCode 完整配置"
+            Source    = "configs\powershell\Microsoft.PowerShell_profile.ps1"
+            Target    = "{USERPROFILE}\Documents\PowerShell\Microsoft.PowerShell_profile.ps1"
+            Comment   = "PowerShell 7+ 配置文件"
+            Method    = "SymLink"
+        },
+        @{
+            Source    = "configs\powershell\Microsoft.PowerShell_profile.ps1"
+            Target    = "{USERPROFILE}\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1"
+            Comment   = "Windows PowerShell 5.x 配置文件"
+            Method    = "SymLink"
+        },
+        @{
+            Source    = "configs\oh-my-posh\my-theme.omp.json"
+            Target    = "{USERPROFILE}\my-theme.omp.json"
+            Comment   = "Oh My Posh 主题文件"
+            Method    = "SymLink"
+        },
+
+        # ---- 编辑器 (使用 transform.ps1 生成) ----
+        @{
+            Source    = "configs\vscode\settings.json"
+            Target    = "{USERPROFILE}\AppData\Roaming\Code\User\settings.json"
+            Comment   = "VS Code 用户设置 (Generated)"
             Method    = "Copy"
             Transform = "editor:vscode"
-        }
+        },
         @{
-            Source    = "editors\cursor\settings.json"
-            Target    = "test\cursor\settings.json"
-            Comment   = "Cursor 完整配置"
+            Source    = "configs\vscode\mcp.json"
+            Target    = "{USERPROFILE}\AppData\Roaming\Code\User\mcp.json"
+            Comment   = "MCP 服务器列表 (Generated)"
             Method    = "Copy"
-            Transform = "editor:cursor"
+            Transform = "mcp:vscode"
+        },
+
+        # ---- 开发工具 ----
+        @{
+            Source    = "configs\npm\.npmrc"
+            Target    = "{USERPROFILE}\.npmrc"
+            Comment   = "NPM 配置文件"
+            Method    = "SymLink"
+        },
+        @{
+            Source    = "configs\ssh\config"
+            Target    = "{USERPROFILE}\.ssh\config"
+            Comment   = "SSH 客户端配置"
+            Method    = "Copy"  # 使用复制以保护权限
         }
     )
 }
