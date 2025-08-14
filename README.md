@@ -14,17 +14,19 @@
 
 ## 🚀 快速开始
 
-1.  **克隆项目**:
+1. **克隆项目**:
+
     ```shell
     git clone https://github.com/6starlong/dotfiles-template.git dotfiles
     cd dotfiles
     ```
 
-2.  **自定义配置**:
+2. **自定义配置**:
     - 将你的配置文件放入 `configs/` 目录。
     - 在 `config.psd1` 中为你添加的文件创建链接。
 
-3.  **运行安装**:
+3. **运行安装**:
+
     ```shell
     .\setup.cmd
     # or run
@@ -33,7 +35,7 @@
 
 ## 📁 项目结构
 
-```
+```text
 dotfiles/
 ├── backups/              # 自动备份（被 git 忽略）
 ├── bin/                  # 核心管理脚本
@@ -57,8 +59,8 @@ dotfiles/
 
 适用于大多数独立的配置文件，如 `.gitconfig`, `.npmrc` 等。
 
-1.  **复制文件**: 将你的配置文件放入 `configs/` 目录下的一个子目录中，例如 `configs/git/.gitconfig`。
-2.  **添加链接**: 在 `config.psd1` 的 `Links` 数组中为它创建一个条目。
+1. **复制文件**: 将你的配置文件放入 `configs/` 目录下的一个子目录中，例如 `configs/git/.gitconfig`。
+2. **添加链接**: 在 `config.psd1` 的 `Links` 数组中为它创建一个条目。
 
     ```powershell
     @{
@@ -68,7 +70,8 @@ dotfiles/
         Method    = "SymLink" # 推荐使用符号链接保持同步
     }
     ```
-3.  **安装**: 双击 `setup.cmd` 或运行 `.\bin\manager.ps1`。
+
+3. **安装**: 双击 `setup.cmd` 或运行 `.\bin\manager.ps1`。
 
 ### 方式二：使用模板生成高级配置
 
@@ -99,6 +102,7 @@ dotfiles/
       }
   )
   ```
+
 - **使用**: 运行 `.\bin\transform.ps1 -Type "mcp:vscode"` 即可生成配置文件。
 
 #### 2. 分层配置 (Layered)
@@ -128,12 +132,14 @@ dotfiles/
       }
   )
   ```
+
 - **使用**: 运行 `.\bin\transform.ps1 -Type "editor:vscode"` 来生成 VS Code 的配置。
 - **提示**: 你还可以在任何层级的文件中使用 `$excludeFields` 数组来移除顶层字段。
 
 ## 📋 使用方法
 
 ### 交互式管理
+
 ```shell
 .\setup.cmd
 # or run
@@ -141,6 +147,7 @@ dotfiles/
 ```
 
 ### 命令行使用
+
 ```shell
 # 安装所有配置
 .\bin\install.ps1
@@ -180,36 +187,40 @@ dotfiles/
   - `settings.json`: 编辑器设置。
   - `mcp.json`: MCP 服务器列表。
 
-
 ## 🔒 处理敏感数据
 
 为了保证仓库的安全和通用性，请**不要**直接提交以下内容：
+
 - **敏感信息**: API 密钥、密码、令牌等。
 - **大型文件**: 图片、可执行文件、压缩包。
 - **临时文件**: 缓存、日志等。
 
 推荐使用以下方法来管理这些文件：
 
-1.  **使用模板**: 对于包含敏感信息的配置文件，在仓库中只保存一个带有占位符的 `.template` 版本。
+1. **使用模板**: 对于包含敏感信息的配置文件，在仓库中只保存一个带有占位符的 `.template` 版本。
+
     ```json
     // configs/app/config.json.template
     {
         "apiKey": "YOUR_API_KEY_HERE"
     }
     ```
+
     然后在本地创建真实的配置文件，并将其路径添加到 `.gitignore` 中。
 
-2.  **使用环境变量**: 在配置中引用环境变量（如 `$env:API_KEY`），而不是硬编码值。
+2. **使用环境变量**: 在配置中引用环境变量（如 `$env:API_KEY`），而不是硬编码值。
 
-3.  **使用 `IgnoreList`**: 在 `config.psd1` 中添加不需要部署的配置路径，实现选择性部署。
+3. **使用 `IgnoreList`**: 在 `config.psd1` 中添加不需要部署的配置路径，实现选择性部署。
 
 ## 🔍 常见问题
 
 **符号链接创建失败**：
+
 - 以管理员身份运行 PowerShell
 - 在 Windows 设置中启用开发者模式
 
 **配置未生效**：
+
 - 检查 `config.psd1` 中的文件路径
 - 确保目标应用已关闭
 - 使用 `.\bin\status.ps1` 检查状态
