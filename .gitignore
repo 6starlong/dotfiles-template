@@ -3,17 +3,17 @@
 # Backup files - 不提交备份文件到版本控制
 backups/
 
-# Temporary file
-.temp/
-*.tmp
-~*
-
-# Windows system files
+# System files
+.DS_Store
 Thumbs.db
+
+# VS Code
+.vscode/
+!.vscode/tasks.json
+
+# Temporary files
+~*
+*.tmp
 
 # Logs
 *.log
-
-# VS Code
-.vscode
-!.vscode/tasks.json

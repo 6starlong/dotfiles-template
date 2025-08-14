@@ -202,7 +202,7 @@ dotfiles/
     ```json
     // configs/app/config.json.template
     {
-        "apiKey": "YOUR_API_KEY_HERE"
+        "API_KEY": "YOUR_API_KEY"
     }
     ```
 

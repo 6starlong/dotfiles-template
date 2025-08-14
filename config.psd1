@@ -36,11 +36,11 @@
         # 按完整路径忽略单个文件
         # "configs/local.settings.json"
 
-        # 按目录忽略
-        # "configs/linux/**"
-
         # 按通配符模式忽略
-        "**/*secret*"
+        "**/*.bak"
+
+        # 按目录忽略
+        # "configs/linux/"
 
         # 否定模式 (即使上层目录被忽略，也强制部署此文件)
         # "!configs/linux/important.conf"
