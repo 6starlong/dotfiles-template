@@ -4,7 +4,7 @@
 
 #region 初始化
 $script:DotfilesDir = Split-Path $PSScriptRoot -Parent
-Import-Module (Join-Path $PSScriptRoot "utils.psm1") -Force
+Import-Module (Join-Path $PSScriptRoot "..\lib\utils.psm1") -Force
 $script:Config = Get-DotfilesConfig
 #endregion
 

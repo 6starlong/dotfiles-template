@@ -1,9 +1,9 @@
-﻿# status.ps1
+# status.ps1
 # 检查 dotfiles 配置的部署状态
 
 #region 初始化
 $script:DotfilesDir = Split-Path $PSScriptRoot -Parent
-Import-Module (Join-Path $PSScriptRoot "utils.psm1") -Force
+Import-Module (Join-Path $PSScriptRoot "..\lib\utils.psm1") -Force
 $script:Config = Get-DotfilesConfig
 #endregion
 
@@ -40,22 +40,28 @@ function Get-ConfigStatus {
 
     # 检查是否为符号链接
     if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
-        $target = $item.Target
-        if ($target -and $target[0] -eq $sourcePath) {
-            return @{
-                Status = "Synced"
-                Message = "已同步"
-                Color = "Green"
-                Icon = "✅"
-            }
-        } elseif ($target) {
-            return @{
-                Status = "LinkError"
-                Message = "链接错误"
-                Color = "Yellow"
-                Icon = "⚠️"
+        $rawTarget = $item.Target
+        # 检查链接的目标路径是否真实存在
+        if (Test-Path -LiteralPath $rawTarget) {
+            # 如果存在，则解析其标准路径并进行比较
+            $resolvedLinkTarget = (Resolve-Path -LiteralPath $rawTarget).Path
+            if ($resolvedLinkTarget -eq $sourcePath) {
+                return @{
+                    Status = "Synced"
+                    Message = "已同步"
+                    Color = "Green"
+                    Icon = "✅"
+                }
+            } else {
+                return @{
+                    Status = "LinkError"
+                    Message = "链接错误"
+                    Color = "Yellow"
+                    Icon = "⚠️"
+                }
             }
         } else {
+            # 如果链接的目标路径不存在，则链接已损坏
             return @{
                 Status = "LinkBroken"
                 Message = "链接损坏"

@@ -8,7 +8,7 @@ param(
 )
 
 $script:DotfilesDir = Split-Path $PSScriptRoot -Parent
-Import-Module (Join-Path $PSScriptRoot "utils.psm1") -Force
+Import-Module (Join-Path $PSScriptRoot "..\lib\utils.psm1") -Force
 $ErrorActionPreference = 'Stop'
 
 # 检查管理员权限
@@ -48,9 +48,6 @@ function Write-InstallResult {
 
 # 非管理员模式：自动提权并显示结果
 if (-not (Test-Administrator)) {
-    Write-Host "    ⚠️ 需要管理员权限创建符号链接" -ForegroundColor Yellow
-    Write-Host "    🔄 正在自动提权..." -ForegroundColor Cyan
-
     try {
         # 创建临时日志文件
         $logFile = Join-Path $env:TEMP "dotfiles_install_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
@@ -184,10 +181,7 @@ foreach ($link in $config.Links) {
         $successCount++
     } catch {
         Write-InstallResult "❌ 部署失败: $($link.Comment)" "Red"
-        Write-InstallResult "   错误: $($_.Exception.Message)" "Gray"
-        if ($method -eq "SymLink") {
-            Write-InstallResult "💡 提示: 创建符号链接需要管理员权限" "Yellow"
-        }
+        Write-InstallResult "   错误: $($_.Exception.Message)" "Yellow"
         $failureCount++
     }
 }

@@ -103,7 +103,7 @@ dotfiles/
   )
   ```
 
-- **使用**: 运行 `.\bin\transform.ps1 -Type "mcp:vscode"` 即可生成配置文件。
+- **使用**: 运行 `.\scripts\transform.ps1 -Type "mcp:vscode"` 即可生成配置文件。
 
 #### 2. 分层配置 (Layered)
 
@@ -133,7 +133,7 @@ dotfiles/
   )
   ```
 
-- **使用**: 运行 `.\bin\transform.ps1 -Type "editor:vscode"` 来生成 VS Code 的配置。
+- **使用**: 运行 `.\scripts\transform.ps1 -Type "editor:vscode"` 来生成 VS Code 的配置。
 - **提示**: 你还可以在任何层级的文件中使用 `$excludeFields` 数组来移除顶层字段。
 
 ## 📋 使用方法
@@ -165,7 +165,7 @@ dotfiles/
 .\bin\uninstall.ps1
 
 # 生成配置文件
-.\bin\transform.ps1
+.\scripts\transform.ps1
 ```
 
 ## 🔧 包含的配置示例
