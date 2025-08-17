@@ -13,6 +13,10 @@ $ErrorActionPreference = 'Stop'
 
 # 检查管理员权限
 function Test-Administrator {
+    if (-not $IsWindows) {
+        # On non-Windows platforms, we assume elevation is handled by `sudo` if needed.
+        return $true
+    }
     $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -61,7 +65,7 @@ if (-not (Test-Administrator)) {
         if ($Overwrite) {
             $argumentList += "-Overwrite"
         }
-        $process = Start-Process "PowerShell" -ArgumentList $argumentList -Verb RunAs -WindowStyle Hidden -PassThru
+        $process = Start-Process "pwsh" -ArgumentList $argumentList -Verb RunAs -WindowStyle Hidden -PassThru
         $process.WaitForExit()
 
         # 等待并读取结果
@@ -106,12 +110,7 @@ if (-not (Test-Administrator)) {
 }
 
 # 加载配置文件
-$configFile = Join-Path $script:DotfilesDir "config.psd1"
-if (-not (Test-Path $configFile)) {
-    Write-Error "配置文件未找到: $configFile"
-    return
-}
-$config = Import-PowerShellDataFile -Path $configFile
+$config = Get-DotfilesConfig
 
 Write-InstallResult ""
 Write-InstallResult "🚀 开始安装 dotfiles..." "Yellow"

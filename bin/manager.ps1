@@ -77,7 +77,7 @@ function Execute-Action {
     }
 
     try {
-        & powershell -ExecutionPolicy Bypass -File $scriptPath
+        & pwsh -File $scriptPath
         Write-Host ""
         Write-Host "    [成功] 操作完成！" -ForegroundColor Green
     } catch {

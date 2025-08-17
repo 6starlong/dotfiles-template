@@ -209,11 +209,18 @@ function Resolve-ConfigPath {
         return $baseConfigRelPath
     } else {
         # 转换为绝对路径模式（默认）
-        # 展开环境变量
-        $resolvedPath = $Path -replace '\{USERPROFILE\}', $env:USERPROFILE
+        # 确定 Home 目录
+        if ($IsWindows) {
+            $homeDir = $env:USERPROFILE
+        } else {
+            $homeDir = $env:HOME
+        }
+
+        # 替换占位符和标准化路径分隔符为 '/'
+        $resolvedPath = $Path.Replace('{USERPROFILE}', $homeDir).Replace('\', '/')
 
         # 如果是相对路径，则相对于 dotfiles 根目录
-        if (-not [System.IO.Path]::IsPathRooted($resolvedPath)) {
+        if (-not ([System.IO.Path]::IsPathRooted($resolvedPath))) {
             $resolvedPath = Join-Path $DotfilesDir $resolvedPath
         }
 
@@ -231,13 +238,7 @@ function Get-TransformConfig {
         [string]$Format
     )
 
-    # 加载配置文件
-    $configFile = Join-Path $script:DotfilesDir "config.psd1"
-    if (-not (Test-Path $configFile)) {
-        throw "配置文件未找到: $configFile"
-    }
-
-    $config = Import-PowerShellDataFile $configFile
+    $config = Get-DotfilesConfig
     if (-not $config.TransformSettings.ContainsKey($Format)) {
         throw "转换配置未找到: $Format"
     }

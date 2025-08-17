@@ -30,7 +30,7 @@
     ```shell
     .\setup.cmd
     # or run
-    # pwsh -File bin/manager.ps1
+    # ./setup.sh
     ```
 
 ## 📁 项目结构
@@ -71,7 +71,7 @@ dotfiles/
     }
     ```
 
-3. **安装**: 双击 `setup.cmd` 或运行 `.\bin\manager.ps1`。
+3. **安装**: 双击启动 `setup.cmd` 或运行 `./setup.sh`。
 
 ### 方式二：使用模板生成高级配置
 
@@ -143,7 +143,7 @@ dotfiles/
 ```shell
 .\setup.cmd
 # or run
-# pwsh -File bin/manager.ps1
+# ./setup.sh
 ```
 
 ### 命令行使用
@@ -187,20 +187,16 @@ dotfiles/
   - `settings.json`: 编辑器设置。
   - `mcp.json`: MCP 服务器列表。
 
-## 🔒 处理敏感数据
+## 🔒 处理敏感数据与特殊文件
 
-为了保证仓库的安全和通用性，请**不要**直接提交以下内容：
-
-- **敏感信息**: API 密钥、密码、令牌等。
-- **大型文件**: 图片、可执行文件、压缩包。
-- **临时文件**: 缓存、日志等。
+原则：为了保证仓库的安全和通用性，请**不要**直接向 Git 仓库提交任何**密钥**、**令牌**或**私有信息**。
 
 推荐使用以下方法来管理这些文件：
 
 1. **使用模板**: 对于包含敏感信息的配置文件，在仓库中只保存一个带有占位符的 `.template` 版本。
 
     ```json
-    // configs/app/config.json.template
+    // configs/app/config.template.json
     {
         "API_KEY": "YOUR_API_KEY"
     }
@@ -208,24 +204,17 @@ dotfiles/
 
     然后在本地创建真实的配置文件，并将其路径添加到 `.gitignore` 中。
 
-2. **使用环境变量**: 在配置中引用环境变量（如 `$env:API_KEY`），而不是硬编码值。
+2. **使用环境变量**: 在脚本或配置中通过 `$env:API_KEY` 引用系统环境变量，而不是硬编码值。
 
-3. **使用 `IgnoreList`**: 在 `config.psd1` 中添加不需要部署的配置路径，实现选择性部署。
+3. **使用 `IgnoreList`**: 在 `config.psd1` 中添加不需要部署的配置路径，实现差异化管理配置文件。
 
 ## 🔍 常见问题
 
-**符号链接创建失败**：
-
-- 以管理员身份运行 PowerShell
-- 在 Windows 设置中启用开发者模式
-
 **配置未生效**：
 
-- 检查 `config.psd1` 中的文件路径
 - 确保目标应用已关闭
+- 检查 `config.psd1` 中的文件路径
 - 使用 `.\bin\status.ps1` 检查状态
-
-> 注：仅在 Windows 测试，其他平台（macOS/Linux）需自行验证。
 
 ## 📄 许可证
 
