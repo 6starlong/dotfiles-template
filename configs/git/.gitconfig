@@ -6,14 +6,14 @@
 
 [core]
     editor = code --wait
-    excludesfile = ~/.gitignore_global
-    autocrlf = input
+		excludesfile = ~/.gitignore_global
+		autocrlf = true
 
 [init]
-    defaultBranch = main
+	defaultBranch = main
 
 [pull]
-    rebase = false
+	rebase = true
 
 [push]
     default = simple
@@ -30,19 +30,13 @@
 
     # 提交操作
     ci = commit
-    cm = commit -m
-    ca = commit -am
 
     # 日志操作
-    lg = log --oneline --graph --decorate
+    lg = log --oneline --graph --decorate --all
     last = log -1 HEAD
 
     # 撤销操作
     unstage = reset HEAD --
-
-    # 远程操作
-    pu = push
-    pl = pull
 
 [color]
     ui = auto

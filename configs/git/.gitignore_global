@@ -1,25 +1,28 @@
 # Global .gitignore
 
-# 操作系统生成的文件
+# === 操作系统生成文件 ===
 .DS_Store
 Thumbs.db
-Desktop.ini
 
-# 编辑器和 IDE 的用户特定设置
+# === 编辑器/IDE配置文件 ===
 .vscode/
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
 .idea/
-*.swp
 
-# 日志和临时文件
-*.log
+# === 备份/临时文件 ===
+*~
 *.tmp
+*.swp
 *.bak
-*.temp
 
-# 敏感文件 (作为最后的防线)
-.env
-*secret*
-*.key
+# === 日志文件 ===
+*.log
+
+# === Node.js ===
+node_modules/
+
+# === Python ===
+__pycache__/
+*.py[cod]
+
+# === 本地环境配置 ===
+.env.local

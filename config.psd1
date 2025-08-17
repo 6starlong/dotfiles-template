@@ -96,9 +96,9 @@
             Method    = "SymLink"
         },
         @{
-            Source    = "configs\oh-my-posh\my-theme.omp.json"
-            Target    = "{USERPROFILE}\my-theme.omp.json"
-            Comment   = "Oh My Posh 主题文件"
+            Source    = "configs\zsh\.zshrc"
+            Target    = "{USERPROFILE}\.zshrc"
+            Comment   = "Zsh 配置文件"
             Method    = "SymLink"
         },
 

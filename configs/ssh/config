@@ -7,6 +7,7 @@ Host github.com
   HostName github.com
   User git
   IdentityFile ~/.ssh/id_rsa_github
+  IdentitiesOnly yes
 
 # ---- 示例: 工作服务器 ----
 # 将 `ssh work-server` 映射到完整的连接信息
@@ -15,12 +16,14 @@ Host work-server
   User your_username
   Port 2222
   IdentityFile ~/.ssh/id_rsa_work
+  IdentitiesOnly yes
 
 # ---- 示例: 个人服务器 ----
 Host personal-vps
   HostName my-vps-domain.com
   User root
   IdentityFile ~/.ssh/id_rsa_personal
+  IdentitiesOnly yes
 
 # ---- 通用设置 ----
 # 对所有主机应用这些设置
@@ -32,6 +35,9 @@ Host *
 
   # 禁用密码验证，强制使用密钥
   PasswordAuthentication no
+
+  # 首次连接时显示可视化主机密钥
+  VisualHostKey yes
 
   # 保持连接活动
   ServerAliveInterval 60
