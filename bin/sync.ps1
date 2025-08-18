@@ -102,7 +102,7 @@ function Process-ConfigLink {
 
     # 检查目标文件是否存在
     if (-not (Test-Path $targetPath)) {
-        Write-Host "    ⚠️ 文件不存在: $($Link.Comment)" -ForegroundColor Yellow
+        Write-Host "    🔔 文件不存在: $($Link.Comment)" -ForegroundColor Yellow
         $SkippedCount.Value++
         return
     }
@@ -179,12 +179,13 @@ function Start-SyncProcess {
     Write-Host ""
     Write-Host "    ----------------------------------------------------------------" -ForegroundColor Gray
     Write-Host ""
-    Write-Host "    📊 同步完成!" -ForegroundColor Green
+    Write-Host "    ✨ 同步完成!" -ForegroundColor Green
     Write-Host "    ✅ 已同步: $syncedCount 个文件" -ForegroundColor Green
     Write-Host "    ⏩ 已跳过: $skippedCount 个文件" -ForegroundColor Cyan
     if ($conflictItems.Count -gt 0) {
-        Write-Host "    ⚠️ 冲突数: $($conflictItems.Count) 个文件" -ForegroundColor Yellow
+        Write-Host "    🔔 冲突数: $($conflictItems.Count) 个文件" -ForegroundColor Yellow
     }
+    Write-Host ""
 }
 #endregion
 

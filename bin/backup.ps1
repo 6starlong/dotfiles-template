@@ -105,7 +105,7 @@ function Create-Backup {
             Write-Host "       $targetPath -> $backupFilePath" -ForegroundColor Gray
             $backedUpCount++
         } catch {
-            Write-Host "    ⚠️ 备份失败: $($link.Comment). 错误: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "    ❌ 备份失败: $($link.Comment). 错误: $($_.Exception.Message)" -ForegroundColor Red
         }
     }
 
@@ -115,7 +115,7 @@ function Create-Backup {
     }
 
     Write-Host ""
-    Write-Host "    🎉 备份了 $backedUpCount 个配置文件" -ForegroundColor Green
+    Write-Host "    🤖 备份了 $backedUpCount 个配置文件" -ForegroundColor Green
     Write-Host "    📁 备份位置: $backupPath" -ForegroundColor Green
     Write-Host ""
 }
@@ -196,7 +196,7 @@ function Restore-FromBackup {
     }
 
     Write-Host ""
-    Write-Host "    🎉 恢复完成! 恢复了 $restoredCount 个配置文件" -ForegroundColor Green
+    Write-Host "    🤖 恢复完成! 恢复了 $restoredCount 个配置文件" -ForegroundColor Green
     Write-Host ""
 }
 
@@ -218,9 +218,9 @@ function Clean-OldBackups {
         return
     }
 
-    Write-Host "    📊 当前备份数量: $($backups.Count)" -ForegroundColor Cyan
+    Write-Host "    🤖 当前备份数量: $($backups.Count)" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "    🗑️ 将删除所有备份文件:" -ForegroundColor Yellow
+    Write-Host "    🔥 将删除所有备份文件:" -ForegroundColor Yellow
     Write-Host ""
 
     foreach ($backup in $backups) {
@@ -235,7 +235,7 @@ function Clean-OldBackups {
         Write-Host ""
         foreach ($backup in $backups) {
             Remove-Item $backup.FullName -Recurse -Force
-            Write-Host "    🗑️ 已删除: $($backup.Name)" -ForegroundColor DarkGray
+            Write-Host "    ➖ 已删除: $($backup.Name)" -ForegroundColor DarkGray
         }
         Write-Host ""
         Write-Host "    ✅ 清理完成! 已删除所有 $($backups.Count) 个备份" -ForegroundColor Green
@@ -256,7 +256,7 @@ function Clean-OldBackupsAuto {
     if ($allBackups.Count -gt $script:BackupSettings.MaxBackups) {
         $toDelete = $allBackups | Select-Object -Skip $script:BackupSettings.MaxBackups
         foreach ($oldBackup in $toDelete) {
-            Write-Host "    🗑️ 删除旧备份: $($oldBackup.Name)" -ForegroundColor DarkGray
+            Write-Host "    ➖ 删除旧备份: $($oldBackup.Name)" -ForegroundColor DarkGray
             Remove-Item $oldBackup.FullName -Recurse -Force
         }
     }

@@ -91,7 +91,7 @@ if (-not (Test-Administrator)) {
                     }
                 }
             } else {
-                Write-Host "    ⚠️ 安装过程未生成输出，请检查是否成功" -ForegroundColor Yellow
+                Write-Host "    🔔 安装过程未生成输出，请检查是否成功" -ForegroundColor Yellow
             }
             Remove-Item $logFile -Force -ErrorAction SilentlyContinue
         } else {
@@ -112,7 +112,6 @@ if (-not (Test-Administrator)) {
 # 加载配置文件
 $config = Get-DotfilesConfig
 
-Write-InstallResult ""
 Write-InstallResult "🚀 开始安装 dotfiles..." "Yellow"
 Write-InstallResult ""
 
@@ -125,10 +124,10 @@ if (Test-Path $backupScript) {
         if ($LASTEXITCODE -eq 0 -or $? -eq $true) {
             Write-InstallResult "✅ 备份完成" "Green"
         } else {
-            Write-InstallResult "⚠️ 备份失败，但继续安装" "Yellow"
+            Write-InstallResult "🔔 备份失败，但继续安装" "Yellow"
         }
     } catch {
-        Write-InstallResult "⚠️ 备份失败，但继续安装: $($_.Exception.Message)" "Yellow"
+        Write-InstallResult "❌ 备份失败: $($_.Exception.Message)" "Red"
     }
 }
 
@@ -151,7 +150,7 @@ foreach ($link in $config.Links) {
     $targetPath = Resolve-ConfigPath -Path $link.Target -DotfilesDir $script:DotfilesDir
 
     if (-not (Test-Path $sourcePath)) {
-        Write-InstallResult "⚠️ 跳过: 源文件未找到 '$sourcePath'" "Yellow"
+        Write-InstallResult "🔔 跳过: 源文件未找到 '$sourcePath'" "Yellow"
         continue
     }
 
@@ -167,14 +166,22 @@ foreach ($link in $config.Links) {
     if (-not $method) { $method = "SymLink" }
 
     try {
+        $isDir = Test-Path -Path $sourcePath -PathType Container
+
         switch ($method) {
             "Copy" {
+                if ($isDir) {
+                    throw "目录不支持 'Copy' 方法。请为 '$($link.Comment)' 使用 'SymLink'。"
+                }
+
                 Copy-Item -Path $sourcePath -Destination $targetPath -Force -ErrorAction Stop
-                Write-InstallResult "✅ 已复制: $($link.Comment)" "Green"
+                Write-InstallResult "✅ 已复制文件: $($link.Comment)" "Green"
             }
             default {
+                # 为文件/目录创建 SymbolicLink (符号链接)
                 New-Item -ItemType SymbolicLink -Path $targetPath -Target $sourcePath -Force -ErrorAction Stop | Out-Null
-                Write-InstallResult "✅ 已链接: $($link.Comment)" "Green"
+                $type = if ($isDir) { "目录" } else { "文件" }
+                Write-InstallResult "✅ 已链接$($type): $($link.Comment)" "Green"
             }
         }
         $successCount++
@@ -190,8 +197,8 @@ Write-InstallResult ""
 if ($failureCount -eq 0) {
     Write-InstallResult "✨ Dotfiles 安装完成！" "Green"
 } elseif ($successCount -gt 0) {
-    Write-InstallResult "⚠️ Dotfiles 安装部分完成（$successCount 成功，$failureCount 失败）" "Yellow"
+    Write-InstallResult "🔔 Dotfiles 安装部分完成（$successCount 成功，$failureCount 失败）" "Yellow"
 } else {
     Write-InstallResult "❌ Dotfiles 安装失败！" "Red"
 }
-Write-InstallResult "📊 处理了 $($successCount + $failureCount) 个配置项" "Green"
+Write-InstallResult "🤖 处理了 $($successCount + $failureCount) 个配置项" "Green"

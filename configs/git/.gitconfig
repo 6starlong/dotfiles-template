@@ -6,14 +6,14 @@
 
 [core]
     editor = code --wait
-		excludesfile = ~/.gitignore_global
-		autocrlf = true
+    excludesfile = ~/.gitignore_global
+    autocrlf = true
 
 [init]
-	defaultBranch = main
+    defaultBranch = main
 
 [pull]
-	rebase = true
+    rebase = true
 
 [push]
     default = simple

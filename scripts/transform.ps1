@@ -58,12 +58,12 @@ function Invoke-RemoveTask {
 
     # 检查目标文件是否存在
     if (-not (Test-Path $TargetFile)) {
-        Write-TransformResult "⚠️ 目标文件不存在，跳过: $($Task.TargetFile)" "Yellow"
+        Write-TransformResult "🔔 目标文件不存在，跳过: $($Task.TargetFile)" "Yellow"
         return $false
     }
 
     try {
-        Write-TransformResult "🗑️ 移除: $($Task.Comment)" "Cyan"
+        Write-TransformResult "🔥 移除: $($Task.Comment)" "Cyan"
         Write-TransformResult "   从 $($Task.TargetFile) 移除相关配置" "Gray"
 
         # 执行移除操作
@@ -92,7 +92,7 @@ function Invoke-TransformTask {
 
     # 检查源文件是否存在
     if (-not (Test-Path $sourceFullPath)) {
-        Write-TransformResult "⚠️ 源文件不存在，跳过: $($Task.SourceFile)" "Yellow"
+        Write-TransformResult "🔔 源文件不存在，跳过: $($Task.SourceFile)" "Yellow"
         return $false
     }
 
@@ -298,8 +298,9 @@ function Get-TransformTasks {
 
 #region 主执行逻辑
 # 启动转换过程
+Write-TransformResult ""
 if ($Remove) {
-    Write-TransformResult "🗑️ 开始移除配置..." "Green"
+    Write-TransformResult "🚀 开始移除配置..." "Green"
 } else {
     Write-TransformResult "🚀 开始生成配置文件..." "Green"
 }
@@ -334,13 +335,13 @@ foreach ($task in $tasks) {
 Write-TransformResult ""
 if ($Remove) {
     Write-TransformResult "✨ 移除完成!" "Green"
-    Write-TransformResult "📊 处理: $generated 个文件" "Green"
+    Write-TransformResult "✅ 处理: $generated 个文件" "Green"
 } else {
     Write-TransformResult "✨ 转换完成!" "Green"
-    Write-TransformResult "📊 生成: $generated 个文件" "Green"
+    Write-TransformResult "✅ 生成: $generated 个文件" "Green"
 }
 if ($skipped -gt 0) {
-    Write-TransformResult "📊 跳过: $skipped 个文件" "Yellow"
+    Write-TransformResult "⏩ 跳过: $skipped 个文件" "Yellow"
 }
 Write-TransformResult ""
 #endregion

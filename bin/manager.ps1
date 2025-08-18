@@ -12,9 +12,9 @@ function Show-Menu {
     Write-Host ""
     Write-Host "     [1] 安装 Dotfiles         [2] 卸载 Dotfiles" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "     [3] 备份管理              [4] 同步配置到仓库" -ForegroundColor Cyan
+    Write-Host "     [3] 同步配置              [4] 备份管理" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "     [5] 检查配置状态" -ForegroundColor Cyan
+    Write-Host "     [5] 检查状态" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "     [0] 退出程序" -ForegroundColor Yellow
     Write-Host ""
@@ -112,8 +112,8 @@ do {
     switch ($choice) {
         "1" { Execute-Action "安装 Dotfiles" "install.ps1" }
         "2" { Execute-Action "卸载 Dotfiles" "uninstall.ps1" }
-        "3" { Show-BackupMenu }
-        "4" { Execute-Action "同步配置到仓库" "sync.ps1" }
+        "3" { Execute-Action "同步配置" "sync.ps1" }
+        "4" { Show-BackupMenu }
         "5" { Show-Status }
         "0" {
             Clear-Host

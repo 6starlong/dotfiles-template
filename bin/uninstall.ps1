@@ -29,8 +29,16 @@ function Process-ConfigUninstall {
     }
 
     try {
-        Remove-Item $targetPath -Force -ErrorAction Stop
-        Write-Host "    🔥 已移除: $($Link.Comment)" -ForegroundColor Green
+        $item = Get-Item -Path $targetPath -Force -ErrorAction SilentlyContinue
+        $isDir = $item.Attributes -band [System.IO.FileAttributes]::Directory
+
+        Remove-Item $targetPath -Force -Recurse -ErrorAction Stop
+
+        if ($isDir) {
+            Write-Host "    ➖ 已移除目录: $($Link.Comment)" -ForegroundColor Green
+        } else {
+            Write-Host "    ➖ 已移除文件: $($Link.Comment)" -ForegroundColor Green
+        }
         Write-Host "       $targetPath" -ForegroundColor Gray
 
         # 清理空的父目录
@@ -46,7 +54,7 @@ function Process-ConfigUninstall {
 
 # 启动卸载过程
 function Start-UninstallProcess {
-    Write-Host "    🗑️ 开始卸载 dotfiles 配置..." -ForegroundColor Yellow
+    Write-Host "    🚀 开始卸载 dotfiles 配置..." -ForegroundColor Yellow
     Write-Host ""
 
     $removedCount = 0
@@ -66,11 +74,12 @@ function Start-UninstallProcess {
 
     # 显示最终统计
     Write-Host ""
-    Write-Host "    📊 卸载完成!" -ForegroundColor Green
-    Write-Host "    🔥 已移除: $removedCount 个文件" -ForegroundColor Green
+    Write-Host "    ✨ 卸载完成!" -ForegroundColor Green
+    Write-Host "    🔥 已移除: $removedCount 个配置" -ForegroundColor Green
     if ($skippedCount -gt 0) {
-        Write-Host "    ⏩ 已跳过: $skippedCount 个文件" -ForegroundColor Cyan
+        Write-Host "    ⏩ 已跳过: $skippedCount 个配置" -ForegroundColor Cyan
     }
+    Write-Host ""
 }
 #endregion
 

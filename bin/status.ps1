@@ -16,6 +16,16 @@ function Get-ConfigStatus {
     $sourcePath = Join-Path $script:DotfilesDir $Link.Source
     $method = Get-Method -Link $Link
 
+    # 检查源文件是否存在
+    if (-not (Test-Path $sourcePath)) {
+        return @{
+            Status = "SourceMissing"
+            Message = "源文件缺失"
+            Color = "Yellow"
+            Icon = "🔔"
+        }
+    }
+
     # 检查目标文件是否存在
     if (-not (Test-Path $targetPath)) {
         return @{
@@ -26,64 +36,58 @@ function Get-ConfigStatus {
         }
     }
 
-    # 检查源文件是否存在
-    if (-not (Test-Path $sourcePath)) {
-        return @{
-            Status = "SourceMissing"
-            Message = "源文件缺失"
-            Color = "Yellow"
-            Icon = "⚠️"
-        }
-    }
-
+    $isSourceDir = Test-Path -Path $sourcePath -PathType Container
     $item = Get-Item $targetPath -Force
 
-    # 检查是否为符号链接
+    # 检查是否为符号链接或Junction
     if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
         $rawTarget = $item.Target
-        # 检查链接的目标路径是否真实存在
-        if (Test-Path -LiteralPath $rawTarget) {
-            # 如果存在，则解析其标准路径并进行比较
-            $resolvedLinkTarget = (Resolve-Path -LiteralPath $rawTarget).Path
-            if ($resolvedLinkTarget -eq $sourcePath) {
-                return @{
-                    Status = "Synced"
-                    Message = "已同步"
-                    Color = "Green"
-                    Icon = "✅"
-                }
-            } else {
-                return @{
-                    Status = "LinkError"
-                    Message = "链接错误"
-                    Color = "Yellow"
-                    Icon = "⚠️"
-                }
+        $resolvedLinkTarget = try {
+            Resolve-Path -LiteralPath $rawTarget -ErrorAction Stop
+        } catch { $null }
+
+        if ($resolvedLinkTarget -and ($resolvedLinkTarget.Path -eq $sourcePath)) {
+            $message = if ($isSourceDir) { "已链接 (目录)" } else { "已链接 (文件)" }
+            return @{
+                Status = "Synced"
+                Message = $message
+                Color = "Green"
+                Icon = "✅"
             }
         } else {
-            # 如果链接的目标路径不存在，则链接已损坏
             return @{
-                Status = "LinkBroken"
-                Message = "链接损坏"
+                Status = "InvalidLink"
+                Message = "链接无效"
                 Color = "Red"
                 Icon = "❌"
             }
         }
     } else {
+        # 目标不是链接
+        if ($isSourceDir) {
+            # 源是目录，但目标不是链接，这是一个错误状态
+            return @{
+                Status = "InvalidLink"
+                Message = "链接无效"
+                Color = "Red"
+                Icon = "❌"
+            }
+        }
+
         # 普通文件，比较内容
         if (Test-FileContentEqual -File1 $sourcePath -File2 $targetPath) {
             return @{
                 Status = "Synced"
-                Message = "已同步"
+                Message = "已同步 (文件)"
                 Color = "Cyan"
                 Icon = "✅"
             }
         } else {
             return @{
                 Status = "OutOfSync"
-                Message = "未同步"
+                Message = "未同步 (文件)"
                 Color = "Yellow"
-                Icon = "⚠️"
+                Icon = "🔔"
             }
         }
     }
@@ -175,13 +179,13 @@ function Show-StatusReport {
 
     # 显示统计信息
     Write-Host ""
-    Write-Host "    📊 状态统计:" -ForegroundColor Cyan
+    Write-Host "    🤖 状态统计:" -ForegroundColor Cyan
     Write-Host "    ✅ 已同步: $($statusCounts.Synced) 个" -ForegroundColor Green
     if ($statusCounts.NotDeployed -gt 0) {
         Write-Host "    ❌ 未部署: $($statusCounts.NotDeployed) 个" -ForegroundColor Red
     }
     if ($statusCounts.OutOfSync -gt 0) {
-        Write-Host "    ⚠️ 未同步: $($statusCounts.OutOfSync) 个" -ForegroundColor Yellow
+        Write-Host "    🔔 未同步: $($statusCounts.OutOfSync) 个" -ForegroundColor Yellow
     }
     if ($statusCounts.Error -gt 0) {
         Write-Host "    🔥 有问题: $($statusCounts.Error) 个" -ForegroundColor Red

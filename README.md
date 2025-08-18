@@ -5,7 +5,7 @@
 ## ✨ 主要功能
 
 - **✅ 配置状态检查**: 实时检查每个配置的同步状态 (已同步、未同步、未部署等)
-- **⚙️ 多种部署方式**: 支持符号 (`SymLink`) 链接和文件复制 (`Copy`) 两种模式
+- **⚙️ 灵活部署方式**: 支持文件复制 `Copy` 及文件/目录符号链接 `SymLink` 多种部署模式
 - **🛡️ 自动备份**: 安装前自动备份现有配置，并支持交互式地创建、恢复和清理备份
 - **🚀 智能 JSON 转换**: 支持 JSONC、深度合并及字段映射实现高级配置管理
 - **💻 跨平台分层配置**: 兼容 Windows/macOS/Linux，通过叠加文件管理差异
@@ -23,7 +23,7 @@
 
 2. **自定义配置**:
     - 将你的配置文件放入 `configs/` 目录。
-    - 在 `config.psd1` 中为你添加的文件创建链接。
+    - 在 `config.psd1` 中为你添加的文件或目录创建链接。
 
 3. **运行安装**:
 
@@ -37,43 +37,55 @@
 
 ```text
 dotfiles/
-├── backups/              # 自动备份（被 git 忽略）
+├── backups/              # 自动备份 (被 git 忽略)
 ├── bin/                  # 核心管理脚本
 ├── configs/              # 配置文件目录
-│   ├── vscode/           # VS Code 设置
 │   ├── git/              # Git 配置
+│   ├── vscode/           # VS Code 配置
 │   └── ...
-├── templates/            # 用于生成配置的模板
+├── lib/                  # 共享模块
+├── scripts/              # 辅助脚本
+│   └── transform.ps1     # 转换工具
+├── templates/            # 配置生成模板
 │   ├── editors/          # 编辑器模板
 │   └── ...
 ├── config.psd1           # 主配置文件
-├── setup.cmd             # 启动脚本
-└── README.md             # 说明文档
+├── README.md             # 说明文档
+├── setup.cmd             # Windows 启动脚本
+└── setup.sh              # macOS/Linux 启动脚本
 ```
 
 ## ⚙️ 核心工作流
 
 你有两种核心方式来管理你的配置文件。
 
-### 方式一：添加简单配置 (最常用)
+### 方式一：添加配置文件 (最常用)
 
-适用于大多数独立的配置文件，如 `.gitconfig`, `.npmrc` 等。
+适用于大多数独立的配置文件或配置目录。只需文件或目录放入 `configs/`，然后在 `config.psd1` 中为其创建条目即可。
 
-1. **复制文件**: 将你的配置文件放入 `configs/` 目录下的一个子目录中，例如 `configs/git/.gitconfig`。
-2. **添加链接**: 在 `config.psd1` 的 `Links` 数组中为它创建一个条目。
+**注意**：目录类型的链接仅支持 `SymLink` 方式。请确保目标路径是一个不存在或为空的目录，且不要将其指向已有重要文件或非独立的配置目录，以避免数据丢失或覆盖。
 
-    ```powershell
-    @{
-        Source    = "configs\git\.gitconfig"
-        Target    = "{USERPROFILE}\.gitconfig"
-        Comment   = "Git 全局配置"
-        Method    = "SymLink" # 推荐使用符号链接保持同步
-    }
-    ```
+```powershell
+# 链接单个文件 (Method: "SymLink" 或 "Copy")
+@{
+    Source    = "configs\git\.gitconfig"
+    Target    = "{USERPROFILE}\.gitconfig"
+    Comment   = "Git 全局配置"
+    Method    = "SymLink"
+}
 
-3. **安装**: 双击启动 `setup.cmd` 或运行 `./setup.sh`。
+# 链接整个目录 (Method 仅支持 "SymLink")
+@{
+    Source    = "configs\oh-my-posh\themes"
+    Target    = "{USERPROFILE}\AppData\Local\Programs\oh-my-posh\themes"
+    Comment   = "Oh My Posh 主题目录"
+    Method    = "SymLink"
+}
+```
 
-### 方式二：使用模板生成高级配置
+**安装**: 双击启动 `setup.cmd` 或运行 `./setup.sh`。
+
+### 方式二：使用模板生成
 
 适用于需要为不同应用或平台生成变体的复杂 JSON 配置。
 
@@ -81,7 +93,7 @@ dotfiles/
 
 当多个应用共享相同的值，但键名不同时使用。
 
-- **场景**: 你的通用服务器列表使用 `mcpServers` 作为键名，但 VS Code 插件需要 `servers`。
+- **场景**: 你的通用服务器列表使用 `mcpServers` 作为键名，但是 VS Code 使用 `servers`。
 - **配置**:
 
   ```powershell
@@ -177,15 +189,15 @@ dotfiles/
   - `.gitignore_global`: Git 全局忽略文件。
 - **PowerShell**:
   - `Microsoft.PowerShell_profile.ps1`: PowerShell 核心配置文件。
-- **Oh My Posh**:
-  - `my-theme.omp.json`: 一个简洁的 Oh My Posh 主题。
 - **NPM**:
-  - `.npmrc`: 设置 NPM 使用淘宝镜像源。
+  - `.npmrc`: NPM 配置文件。
 - **SSH**:
   - `config`: SSH 客户端配置，用于简化远程连接。
 - **VS Code (通过模板生成)**:
   - `settings.json`: 编辑器设置。
   - `mcp.json`: MCP 服务器列表。
+- **Zsh**:
+  - `.zshrc`: Zsh 核心配置文件。
 
 ## 🔒 处理敏感数据与特殊文件
 
@@ -218,4 +230,4 @@ dotfiles/
 
 ## 📄 许可证
 
-本项目采用 MIT 许可证 - 详见 LICENSE 文件。
+MIT License
