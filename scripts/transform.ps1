@@ -167,7 +167,7 @@ function Invoke-FileTransform {
     }
     else {
         $sourceContent = Get-Content $SourceFile -Raw -Encoding UTF8
-        $sourceObject = ConvertFrom-Jsonc -Content $sourceContent
+        $sourceObject = $sourceContent | ConvertFrom-Json
     }
 
     # 字段映射转换
@@ -202,7 +202,7 @@ function Invoke-FileTransform {
         try {
             $targetContent = Get-Content $TargetFile -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
             if ($targetContent -and $targetContent.Trim()) {
-                $targetObject = ConvertFrom-Jsonc -Content $targetContent
+                $targetObject = $targetContent | ConvertFrom-Json
                 if ($targetObject) {
                     $resultObject = $targetObject
                 }

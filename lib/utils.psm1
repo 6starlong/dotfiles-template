@@ -121,21 +121,6 @@ function Test-ConfigIgnored {
     return $shouldIgnore
 }
 
-# 将JSONC内容转换为JSON对象
-function ConvertFrom-Jsonc {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory, ValueFromPipeline)]
-        [string]$Content
-    )
-
-    process {
-        # 移除块注释和行注释
-        $cleanContent = $Content -replace '(?s)/\*.*?\*/' -replace '(?m)//.*$'
-        return $cleanContent | ConvertFrom-Json
-    }
-}
-
 # 清理和标准化JSON格式
 function Format-JsonClean {
     [CmdletBinding()]
@@ -263,7 +248,7 @@ function Read-JsonConfig {
         if ([string]::IsNullOrWhiteSpace($content)) {
             return [psobject]@{}
         }
-        return ConvertFrom-Jsonc -Content $content
+        return $content | ConvertFrom-Json
     } catch {
         Write-Warning "无法读取配置文件 $Path : $($_.Exception.Message)"
         return [psobject]@{}
@@ -281,7 +266,7 @@ function Get-ExistingConfig {
     try {
         $existingContent = Get-Content $TargetFile -Raw -Encoding UTF8
         if ($existingContent -and $existingContent.Trim()) {
-            return ConvertFrom-Jsonc -Content $existingContent
+            return $existingContent | ConvertFrom-Json
         }
     } catch {
         Write-Verbose "无法读取现有配置文件，将创建新文件: $($_.Exception.Message)"
@@ -606,7 +591,7 @@ function Get-SourceFields {
     # 添加基础配置文件的字段
     if (Test-Path $SourceFile) {
         $sourceContent = Get-Content $SourceFile -Raw -Encoding UTF8
-        $sourceObject = ConvertFrom-Jsonc -Content $sourceContent
+        $sourceObject = $sourceContent | ConvertFrom-Json
         $allSourceFields += $sourceObject.psobject.Properties.Name
     }
 
@@ -619,7 +604,7 @@ function Get-SourceFields {
                 $fullLayerPath = Join-Path $dotfilesDir $layerPath
                 if (Test-Path $fullLayerPath) {
                     $layerContent = Get-Content $fullLayerPath -Raw -Encoding UTF8
-                    $layerObject = ConvertFrom-Jsonc -Content $layerContent
+                    $layerObject = $layerContent | ConvertFrom-Json
                     $allSourceFields += $layerObject.psobject.Properties.Name
                 }
             }
@@ -684,7 +669,7 @@ function Remove-ConfigFields {
             return
         }
 
-        $targetObject = ConvertFrom-Jsonc -Content $targetContent
+        $targetObject = $targetContent | ConvertFrom-Json
         if (-not $targetObject) {
             Write-Warning "无法解析目标文件: $TargetFile"
             return
