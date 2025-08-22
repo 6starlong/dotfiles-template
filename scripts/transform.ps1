@@ -224,71 +224,56 @@ function Get-TransformTasks {
 
     $tasks = @()
 
-    # 精确匹配：类型:平台
-    if ($FilterType -and $FilterType.Contains(":")) {
-        $parts = $FilterType -split ":"
-        $configType = $parts[0]
-        $platform = $parts[1]
+    # 检查 Transforms 配置节是否存在，如果不存在则直接返回
+    if (-not $script:Config.psobject.Properties.Name -icontains 'Transforms') {
+        return @()
+    }
 
-        if (-not $script:Config.TransformSettings.ContainsKey($configType)) {
-            return @()
+    # 统一循环处理所有转换任务
+    foreach ($transform in $script:Config.Transforms) {
+        # 关卡 1: 根据 -Type 过滤器进行匹配
+        if ($FilterType) {
+            if ($FilterType.Contains(":")) {
+                # 精确匹配 (例如: mcp:vscode)
+                if ($transform.Type -ne $FilterType) { continue }
+            } else {
+                # 类型匹配 (例如: mcp)，匹配所有 mcp:* 的任务
+                $typePrefix = $FilterType + ":"
+                if (-not $transform.Type.StartsWith($typePrefix)) { continue }
+            }
         }
 
+        # 关卡 2: 如果 Target 属性无效，则跳过
+        if ([string]::IsNullOrWhiteSpace($transform.Target)) {
+            continue
+        }
+
+        # 解析 Transform 字符串
+        $transformParts = $transform.Type -split ":"
+        if ($transformParts.Length -ne 2) {
+            Write-TransformResult "🔔 配置格式无效: $($transform.Type) (应为 '类型:平台')，已跳过。" "Yellow"
+            continue
+        }
+        $configType = $transformParts[0]
+        $platform = $transformParts[1]
+
+        # 关卡 3: 如果找不到对应的转换设置，则跳过
         $setting = $script:Config.TransformSettings[$configType]
+        if ($null -eq $setting) {
+            continue
+        }
 
-        # 检查平台支持
+        # 关卡 4: 检查分层配置是否支持当前平台
         if ($setting.Layered -and $setting.Layered.Count -gt 0 -and -not $setting.Layered.ContainsKey($platform)) {
-            Write-TransformResult "❌ 配置类型 '$configType' 不支持平台 '$platform'" "Red"
-            return @()
+            Write-TransformResult "❌ 配置类型 '$configType' 不支持平台 '$platform' (在 layered 配置中未找到)" "Red"
+            continue
         }
 
-        # 优先查找带 Transform 标识的 Link 配置
-        $matchingLinks = $script:Config.Links | Where-Object {
-            $_.Method -eq "Copy" -and $_.Transform -eq $FilterType
-        }
-
-        if ($matchingLinks) {
-            foreach ($link in $matchingLinks) {
-                $tasks += @{
-                    SourceFile = $setting.SourceFile
-                    TargetFile = $link.Source
-                    TransformType = $FilterType
-                    Comment = $link.Comment
-                }
-            }
-        } else {
-            # 使用默认路径格式：configType\platform.json
-            $tasks += @{
-                SourceFile = $setting.SourceFile
-                TargetFile = "$configType\$platform.json"
-                TransformType = $FilterType
-                Comment = "$configType $platform 配置"
-            }
-        }
-    } else {
-        # 遍历所有 Copy 方法的 Links
-        foreach ($link in $script:Config.Links) {
-            if ($link.Method -eq "Copy") {
-                # 优先使用 Transform 字段
-                if ($link.Transform) {
-                    $transformParts = $link.Transform -split ":"
-                    if ($transformParts.Length -eq 2) {
-                        $configType = $transformParts[0]
-                        $platform = $transformParts[1]
-
-                        if ($script:Config.TransformSettings.ContainsKey($configType) -and
-                            (-not $FilterType -or $configType -eq $FilterType)) {
-                            $setting = $script:Config.TransformSettings[$configType]
-                            $tasks += @{
-                                SourceFile = $setting.SourceFile
-                                TargetFile = $link.Source
-                                TransformType = $link.Transform
-                                Comment = $link.Comment
-                            }
-                        }
-                    }
-                }
-            }
+        $tasks += @{
+            SourceFile    = $setting.SourceFile
+            TargetFile    = $transform.Target
+            TransformType = $transform.Type
+            Comment       = $transform.Comment
         }
     }
 
@@ -310,6 +295,7 @@ Write-TransformResult ""
 $tasks = Get-TransformTasks -FilterType $Type
 
 if ($tasks.Count -eq 0) {
+    Write-TransformResult ""
     if ($Type) {
         Write-TransformResult "❌ 未找到匹配的配置: $Type" "Red"
         Write-TransformResult "💡 使用 -Help 查看支持的配置类型" "Yellow"

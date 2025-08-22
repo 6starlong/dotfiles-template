@@ -23,7 +23,9 @@
 
 2. **自定义配置**:
     - 将你的配置文件放入 `configs/` 目录。
-    - 在 `config.psd1` 中为你添加的文件或目录创建链接。
+    - 打开 `config.psd1` 并根据你的需求添加条目：
+      - **如需部署文件/目录**: 在 `Links` 列表中为其创建链接。
+      - **如需从模板生成文件**: 在 `Transforms` 列表中为其创建生成任务。
 
 3. **运行安装**:
 
@@ -57,95 +59,98 @@ dotfiles/
 
 ## ⚙️ 核心工作流
 
-你有两种核心方式来管理你的配置文件。
+使用**部署**和**生成**这两种方式来管理你的配置文件。
 
-### 方式一：添加配置文件 (最常用)
+### 部署链接 (Deployment Links)
 
-适用于大多数独立的配置文件或配置目录。只需文件或目录放入 `configs/`，然后在 `config.psd1` 中为其创建条目即可。
+用于将仓库中的文件或目录部署到你的操作系统中（通过符号链接或复制）。
+
+- **配置文件**: `config.psd1` -> `Links` 列表
+- **适用场景**: 独立的配置文件（`~/.gitconfig`）或同步整个目录的配置（`~/.claude/`）。
 
 **注意**：目录类型的链接仅支持 `SymLink` 方式。请确保目标路径是一个不存在或为空的目录，且不要将其指向已有重要文件或非独立的配置目录，以避免数据丢失或覆盖。
 
 ```powershell
-# 链接单个文件 (Method: "SymLink" 或 "Copy")
-@{
-    Source    = "configs\git\.gitconfig"
-    Target    = "{USERPROFILE}\.gitconfig"
-    Comment   = "Git 全局配置"
-    Method    = "SymLink"
-}
-
-# 链接整个目录 (Method 仅支持 "SymLink")
-@{
-    Source    = "configs\oh-my-posh\themes"
-    Target    = "{USERPROFILE}\AppData\Local\Programs\oh-my-posh\themes"
-    Comment   = "Oh My Posh 主题目录"
-    Method    = "SymLink"
-}
+# 在 config.psd1 中
+@Links = @(
+    # 链接单个文件
+    @{
+        Source    = "configs\git\.gitconfig"
+        Target    = "{USERPROFILE}\.gitconfig"
+        Comment   = "Git 全局配置"
+        Method    = "SymLink" # 或 "Copy"
+    },
+    # 链接整个目录
+    @{
+        Source    = "configs\claude"
+        Target    = "{USERPROFILE}\.claude"
+        Comment   = "Claude Code 配置文件"
+        Method    = "SymLink"
+    }
+)
 ```
 
 **安装**: 双击启动 `setup.cmd` 或运行 `./setup.sh`。
 
-### 方式二：使用模板生成
+### 生成配置文件 (Generating Config Files)
 
-适用于需要为不同应用或平台生成变体的复杂 JSON 配置。
+用于从模板 (`.\templates\`) 生成变体的复杂 JSON 配置，在不同平台或应用中使用。
+
+- **配置文件**: `config.psd1` -> `Transforms` 列表
+- **适用场景**: 需要字段映射（键名不同但值相同）或分层配置（共享基础配置，但各有不同）的 JSON 配置。
 
 #### 1. 字段映射 (FieldMapping)
 
-当多个应用共享相同的值，但键名不同时使用。
+```powershell
+# 在 config.psd1 中
+TransformSettings = @{
+    "mcp" = @{
+        SourceFile   = "templates\mcp\servers.json"
+        DefaultField = "mcpServers"
+        Platforms    = @{ vscode = "servers" }
+    }
+}
 
-- **场景**: 你的通用服务器列表使用 `mcpServers` 作为键名，但是 VS Code 使用 `servers`。
-- **配置**:
+Transforms = @(
+    # 定义一个 "mcp:vscode" 类型的转换任务
+    @{
+        Type    = "mcp:vscode"
+        Target  = "configs\vscode\mcp.json" # 这是生成文件的存放路径
+        Comment = "VS Code MCP Servers"
+    }
+)
+```
 
-  ```powershell
-  # 在 config.psd1 中
-  TransformSettings = @{
-      "mcp" = @{
-          SourceFile   = "templates\mcp\servers.json"
-          DefaultField = "mcpServers"
-          Platforms    = @{ vscode = "servers" }
-      }
-  }
-  Links = @(
-      @{
-          Source    = "configs\mcp\servers.json"
-          Target    = "{USERPROFILE}\AppData\Roaming\Code\User\mcp.json"
-          Method    = "Copy"
-          Transform = "mcp:vscode"
-      }
-  )
-  ```
-
-- **使用**: 运行 `.\scripts\transform.ps1 -Type "mcp:vscode"` 即可生成配置文件。
+- **使用**: 运行 `.\scripts\transform.ps1 -Type mcp:vscode` 即可生成配置文件。
 
 #### 2. 分层配置 (Layered)
 
-当需要为不同应用（如 VS Code vs Cursor）或平台提供不同配置时使用。
+```powershell
+# 在 config.psd1 中
+TransformSettings = @{
+    "editor" = @{
+        SourceFile = "templates\editors\settings.base.json"
+        Layered    = @{
+            "vscode" = @("templates\editors\settings.vscode.json")
+            "cursor" = @("templates\editors\settings.cursor.json")
+        }
+    }
+}
+Transforms = @(
+    @{
+        Type    = "editor:vscode"
+        Target  = "configs\vscode\settings.json"
+        Comment = "VS Code Settings"
+    }
+    @{
+        Type    = "editor:cursor"
+        Target  = "configs\cursor\settings.json"
+        Comment = "Cursor Settings"
+    }
+)
+```
 
-- **场景**: VS Code 和 Cursor 共享一套基础配置，但各自有少量特殊设置。
-- **配置**:
-
-  ```powershell
-  # 在 config.psd1 中
-  TransformSettings = @{
-      "editor" = @{
-          SourceFile = "templates\editors\settings.base.json"
-          Layered    = @{
-              "vscode" = @("templates\editors\settings.vscode.json")
-              "cursor" = @("templates\editors\settings.cursor.json")
-          }
-      }
-  }
-  Links = @(
-      @{
-          Source    = "configs\vscode\settings.json"
-          Target    = "{USERPROFILE}\AppData\Roaming\Code\User\settings.json"
-          Method    = "Copy"
-          Transform = "editor:vscode"
-      }
-  )
-  ```
-
-- **使用**: 运行 `.\scripts\transform.ps1 -Type "editor:vscode"` 来生成 VS Code 的配置。
+- **使用**: 运行 `.\scripts\transform.ps1 -T editor` 来生成配置文件。
 - **提示**: 你还可以在任何层级的文件中使用 `$excludeFields` 数组来移除顶层字段。
 
 ## 📋 使用方法

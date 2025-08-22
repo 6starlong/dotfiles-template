@@ -66,6 +66,20 @@
         }
     }
 
+    # 转换链接 - 定义生成配置文件的映射关系
+    Transforms = @(
+        @{
+            Type    = "editor:vscode"
+            Target  = "configs\vscode\settings.json"
+            Comment = "VS Code Settings"
+        },
+        @{
+            Type    = "mcp:vscode"
+            Target  = "configs\vscode\mcp.json"
+            Comment = "VS Code MCP Servers"
+        }
+    )
+
     # 配置链接 - 定义源文件到目标位置的映射关系
     Links = @(
         # ---- 版本控制 ----
@@ -102,22 +116,6 @@
             Method    = "SymLink"
         },
 
-        # ---- 编辑器 (使用 transform.ps1 生成) ----
-        @{
-            Source    = "configs\vscode\settings.json"
-            Target    = "{USERPROFILE}\AppData\Roaming\Code\User\settings.json"
-            Comment   = "VS Code 用户设置 (Generated)"
-            Method    = "Copy"
-            Transform = "editor:vscode"
-        },
-        @{
-            Source    = "configs\vscode\mcp.json"
-            Target    = "{USERPROFILE}\AppData\Roaming\Code\User\mcp.json"
-            Comment   = "MCP 服务器列表 (Generated)"
-            Method    = "Copy"
-            Transform = "mcp:vscode"
-        },
-
         # ---- 开发工具 ----
         @{
             Source    = "configs\npm\.npmrc"
@@ -129,7 +127,21 @@
             Source    = "configs\ssh\config"
             Target    = "{USERPROFILE}\.ssh\config"
             Comment   = "SSH 客户端配置"
-            Method    = "Copy"  # 使用复制以保护权限
+            Method    = "Copy" # 使用复制以保护权限
+        },
+
+        # ---- 编辑器 ----
+        @{
+            Source    = "configs\vscode\settings.json"
+            Target    = "{USERPROFILE}\AppData\Roaming\Code\User\settings.json"
+            Comment   = "VS Code Settings"
+            Method    = "Copy"
+        },
+        @{
+            Source    = "configs\vscode\mcp.json"
+            Target    = "{USERPROFILE}\AppData\Roaming\Code\User\mcp.json"
+            Comment   = "VS Code MCP Servers"
+            Method    = "Copy"
         }
     )
 }
