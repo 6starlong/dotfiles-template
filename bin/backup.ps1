@@ -8,10 +8,9 @@ param(
 )
 
 #region 初始化
-$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
 Import-Module (Join-Path $PSScriptRoot "..\lib\utils.psm1") -Force
+$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
 $script:Config = Get-DotfilesConfig
-
 $script:BackupSettings = $script:Config.BackupSettings
 $script:BackupBaseDir = Join-Path $script:DotfilesDir $script:BackupSettings.BackupDir
 #endregion

@@ -1,15 +1,12 @@
-﻿# uninstall.ps1
+# uninstall.ps1
 # 移除 install.ps1 部署的配置文件
 
-$ErrorActionPreference = 'Stop'
-
-#region 初始化
-$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
+# 初始化
 Import-Module (Join-Path $PSScriptRoot "..\lib\utils.psm1") -Force
+$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
 $script:Config = Get-DotfilesConfig
-#endregion
 
-#region 主卸载逻辑
+$ErrorActionPreference = 'Stop'
 
 # 处理单个配置链接的卸载
 function Process-ConfigUninstall {
@@ -72,6 +69,19 @@ function Start-UninstallProcess {
         Process-ConfigUninstall -Link $link -RemovedCount ([ref]$removedCount) -SkippedCount ([ref]$skippedCount)
     }
 
+    # 清理生成的配置文件
+    Write-Host ""
+    Write-Host "    🧹 正在清理生成的配置文件..." -ForegroundColor Yellow
+    $transformScript = Join-Path $PSScriptRoot "..\scripts\transform.ps1"
+    if (Test-Path $transformScript) {
+        try {
+            & $transformScript -Remove -Silent 2>&1 | Out-Null
+            Write-Host "    ✅ 清理完成" -ForegroundColor Green
+        } catch {
+            Write-Host "    ❌ 清理失败: $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+
     # 显示最终统计
     Write-Host ""
     Write-Host "    ✨ 卸载完成!" -ForegroundColor Green
@@ -81,7 +91,6 @@ function Start-UninstallProcess {
     }
     Write-Host ""
 }
-#endregion
 
 # 启动卸载过程
 Start-UninstallProcess

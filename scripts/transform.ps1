@@ -6,8 +6,26 @@ param(
     [string]$Type,      # 可选：指定配置类型 (mcp, editor) 或具体配置 (mcp:vscode)
     [switch]$Force,     # 强制重新生成文件
     [switch]$Remove,    # 反转操作：从目标文件中移除相关配置
+    [switch]$Silent,    # 静默模式：不输出详细信息
     [switch]$Help       # 显示帮助信息
 )
+
+#region 初始化
+Import-Module (Join-Path $PSScriptRoot "..\lib\utils.psm1") -Force
+$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
+$script:Config = Get-DotfilesConfig
+
+
+$ErrorActionPreference = 'Stop'
+
+# 输出信息
+function Write-TransformResult {
+    param([string]$Message, [string]$Color = "White")
+    if (-not $Silent) {
+        Write-Host $Message -ForegroundColor $Color
+    }
+}
+#endregion
 
 #region 帮助信息
 function Show-Help {
@@ -19,35 +37,21 @@ function Show-Help {
     Write-Host ""
     Write-Host "参数:" -ForegroundColor Yellow
     Write-Host "  -Type            指定要生成的配置类型 (格式: 类型 或 类型:平台)" -ForegroundColor White
-    Write-Host "  -Force           强制重新生成文件（默认会与现有配置合并）" -ForegroundColor White
+    Write-Host "  -Force           强制重新生成文件 (仅覆盖指定配置)" -ForegroundColor White
     Write-Host "  -Remove          反转操作：从目标文件中移除指定配置" -ForegroundColor White
+    Write-Host "  -Silent          静默模式：不输出详细信息" -ForegroundColor White
     Write-Host "  -Help            显示此帮助信息" -ForegroundColor White
     Write-Host ""
     Write-Host "示例:" -ForegroundColor Yellow
     Write-Host "  $scriptName                           # 生成所有配置" -ForegroundColor White
     Write-Host "  $scriptName -Type mcp                 # 只生成 MCP 配置" -ForegroundColor White
-    Write-Host "  $scriptName -Type mcp:vscode -Force   # 强制生成 VSCode MCP" -ForegroundColor White
-    Write-Host "  $scriptName -Type mcp:vscode -Remove  # 从 VSCode MCP 配置中移除相关配置" -ForegroundColor White
+    Write-Host "  $scriptName -Type mcp:vscode -Force   # 强制覆盖 VSCode MCP 相关配置" -ForegroundColor White
+    Write-Host "  $scriptName -Type mcp:vscode -Remove  # 从 VSCode MCP 中移除相关配置" -ForegroundColor White
     Write-Host ""
 }
 
 if ($Help) {
-    Show-Help
-    return
-}
-#endregion
-
-#region 初始化
-$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
-Import-Module (Join-Path $PSScriptRoot "..\lib\utils.psm1") -Force
-$script:Config = Get-DotfilesConfig
-
-$ErrorActionPreference = 'Stop'
-
-# 输出信息
-function Write-TransformResult {
-    param([string]$Message, [string]$Color = "White")
-    Write-Host $Message -ForegroundColor $Color
+    return Show-Help
 }
 #endregion
 

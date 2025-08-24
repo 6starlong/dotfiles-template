@@ -3,8 +3,8 @@
 # 支持 Copy 方法的配置文件
 
 #region 初始化
-$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
 Import-Module (Join-Path $PSScriptRoot "..\lib\utils.psm1") -Force
+$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
 $script:Config = Get-DotfilesConfig
 #endregion
 
@@ -92,7 +92,7 @@ function Process-ConfigLink {
     $method = Get-Method -Link $Link
 
     if ($method -ne "Copy") {
-        Write-Host "    ⏩ 跳过 SymLink: $($Link.Comment) (SymLink 自动同步)" -ForegroundColor Cyan
+        Write-Host "    ⏩ 跳过 SymLink: $($Link.Comment)" -ForegroundColor Cyan
         $SkippedCount.Value++
         return
     }

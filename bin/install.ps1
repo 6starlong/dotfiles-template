@@ -1,4 +1,4 @@
-﻿# install.ps1
+# install.ps1
 # 根据 config.psd1 配置文件安装 dotfiles
 # 需要管理员权限来创建符号链接
 
@@ -7,10 +7,15 @@ param(
     [switch]$Overwrite
 )
 
-$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
+#region 初始化
 Import-Module (Join-Path $PSScriptRoot "..\lib\utils.psm1") -Force
-$ErrorActionPreference = 'Stop'
+$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
+$script:Config = Get-DotfilesConfig
 
+$ErrorActionPreference = 'Stop'
+#endregion
+
+#region 权限检查与输出函数
 # 检查管理员权限
 function Test-Administrator {
     if (-not $IsWindows) {
@@ -108,11 +113,24 @@ if (-not (Test-Administrator)) {
         return
     }
 }
+#endregion
 
-# 加载配置文件
-$config = Get-DotfilesConfig
-
+#region 安装逻辑
 Write-InstallResult "🚀 开始安装 dotfiles..." "Yellow"
+Write-InstallResult ""
+
+# 转换配置文件
+Write-InstallResult "🔄 正在生成配置文件..." "Cyan"
+$transformScript = Join-Path $PSScriptRoot "..\scripts\transform.ps1"
+if (Test-Path $transformScript) {
+    try {
+        # 使用 -Force 参数确保所有配置都基于最新模板重新生成
+        & $transformScript -Force -Silent 2>&1 | Out-Null
+        Write-InstallResult "✅ 配置文件生成完成" "Green"
+    } catch {
+        Write-InstallResult "❌ 配置文件生成失败: $($_.Exception.Message)" "Red"
+    }
+}
 Write-InstallResult ""
 
 # 创建备份
@@ -139,7 +157,7 @@ Write-InstallResult ""
 $successCount = 0
 $failureCount = 0
 
-foreach ($link in $config.Links) {
+foreach ($link in $script:Config.Links) {
     # 检查是否应该忽略此配置项
     if (Test-ConfigIgnored -Link $link) {
         Write-InstallResult "⏩ 忽略: $($link.Comment)" "Gray"
@@ -162,7 +180,7 @@ foreach ($link in $config.Links) {
     }
 
     # 确定部署方法
-    $method = if ($link.Method) { $link.Method } else { $config.DefaultMethod }
+    $method = if ($link.Method) { $link.Method } else { $script:Config.DefaultMethod }
     if (-not $method) { $method = "SymLink" }
 
     try {
@@ -191,6 +209,7 @@ foreach ($link in $config.Links) {
         $failureCount++
     }
 }
+#endregion
 
 # 显示结果
 Write-InstallResult ""

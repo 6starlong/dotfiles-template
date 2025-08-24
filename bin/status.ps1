@@ -1,13 +1,11 @@
 # status.ps1
 # 检查 dotfiles 配置的部署状态
 
-#region 初始化
-$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
+#初始化
 Import-Module (Join-Path $PSScriptRoot "..\lib\utils.psm1") -Force
+$script:DotfilesDir = Split-Path $PSScriptRoot -Parent
 $script:Config = Get-DotfilesConfig
-#endregion
 
-#region 状态检查逻辑
 # 检查单个配置的状态
 function Get-ConfigStatus {
     param([hashtable]$Link)
@@ -192,7 +190,6 @@ function Show-StatusReport {
     }
     Write-Host ""
 }
-#endregion
 
 # 显示状态报告
 Show-StatusReport
