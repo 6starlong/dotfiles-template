@@ -1,4 +1,4 @@
-﻿# Dotfiles Manager
+# Dotfiles Manager
 # 提供图形化菜单界面来管理 dotfiles 配置
 
 $Host.UI.RawUI.WindowTitle = "Dotfiles Manager"

@@ -1,4 +1,4 @@
-﻿# backup.ps1
+# backup.ps1
 # 配置文件备份管理工具
 
 param(

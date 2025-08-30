@@ -7,7 +7,7 @@
 [core]
     editor = code --wait
     excludesfile = ~/.gitignore_global
-    autocrlf = true
+    autocrlf = input
 
 [init]
     defaultBranch = main

@@ -4,30 +4,32 @@
 
 ## ✨ 主要功能
 
-- **✅ 配置状态检查**: 实时检查每个配置的同步状态 (已同步、未同步、未部署等)
-- **⚙️ 灵活部署方式**: 支持文件复制 `Copy` 及文件/目录符号链接 `SymLink` 多种部署模式
-- **🛡️ 自动备份**: 安装前自动备份现有配置，并支持交互式地创建、恢复和清理备份
-- **🚀 智能 JSON 转换**: 支持 JSONC、深度合并及字段映射实现高级配置管理
-- **💻 跨平台分层配置**: 兼容 Windows/macOS/Linux，通过叠加文件管理差异
-- **🚫 灵活忽略机制**: 使用类似 `.gitignore` 的语法控制部署
-- **🔒 Windows 自动提权**: 自动请求管理员权限简化符号链接创建
+- **⚙️ 部署方式**: 支持复制 `Copy` 及符号链接 `SymLink` 两种部署模式
+- **✅ 状态检查**: 检查每项配置的同步状态 (已同步、未同步、未部署等)
+- **🛡️ 自动备份**: 安装前自动备份现有配置，自主创建、恢复或清理备份
+- **🚀 JSON 转换**: 支持 JSONC、深度合并及字段映射实现高级配置管理
+- **💻 跨平台**: 通过 `PowerShell` 在 Windows、Linux 和 macOS 上使用
+- **🔒 权限管理**: Windows 自动请求管理员权限简化符号链接创建
+- **🚫 忽略机制**: 使用类似 `.gitignore` 的语法控制部署
 
 ## 🚀 快速开始
 
-1. **克隆项目**:
+1. [**在 Windows、Linux 和 macOS 上安装 PowerShell**](https://learn.microsoft.com/zh-cn/powershell/scripting/install/installing-powershell)
+
+2. **克隆项目**:
 
     ```shell
     git clone https://github.com/6starlong/dotfiles-template.git dotfiles
     cd dotfiles
     ```
 
-2. **自定义配置**:
+3. **自定义配置**:
     - 将你的配置文件放入 `configs/` 目录。
     - 打开 `config.psd1` 并根据你的需求添加条目：
       - **如需部署文件/目录**: 在 `Links` 列表中为其创建链接。
       - **如需从模板生成文件**: 在 `Transforms` 列表中为其创建生成任务。
 
-3. **运行安装**:
+4. **启动**:
 
     ```shell
     .\setup.cmd

@@ -8,25 +8,26 @@
 # ----------------------------------------------------------------------
 # 首次配置或更新时，请在 PowerShell (Admin) 中执行以下命令：
 #
-# Install-Module posh-git -Scope CurrentUser -Force
 # Install-Module PSReadLine -Scope CurrentUser -Force
+# Install-Module posh-git -Scope CurrentUser -Force
+
 
 # ----------------------------------------------------------------------
 # 2. 导入核心模块
 # ----------------------------------------------------------------------
 # 加载导入的模块，增强终端功能。
-Import-Module posh-git -ErrorAction SilentlyContinue
 Import-Module PSReadLine -ErrorAction SilentlyContinue
+Import-Module posh-git -ErrorAction SilentlyContinue
 
 
 # ----------------------------------------------------------------------
 # 3. PSReadLine (命令行编辑)
 # ----------------------------------------------------------------------
 # 配置语法高亮、历史记录、自动补全等命令行编辑功能。
-Set-PSReadLineOption -EditMode Windows               # 设置编辑模式为 Windows 风格 (快捷键同 cmd)
-Set-PSReadLineOption -PredictionSource History       # 开启基于历史的命令预测 (输入命令时会灰色显示建议)
-Set-PSReadLineOption -HistorySearchCursorMovesToEnd  # 搜索历史命令时，光标自动置于末尾
-# Set-PSReadLineOption -ViModeIndicator Script       # (可选) 如果你习惯 Vi/Vim，可以开启 Vi 模式
+Set-PSReadLineOption -EditMode Windows                   # 设置编辑模式为 Windows 风格
+Set-PSReadLineOption -PredictionSource HistoryAndPlugin  # 启用历史和插件预测
+Set-PSReadLineOption -HistorySearchCursorMovesToEnd      # 搜索历史命令时光标置于末尾
+# Set-PSReadLineOption -ViModeIndicator Script           # (可选) Vi/Vim 模式
 
 # 补全增强配置
 Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete                 # 菜单式补全

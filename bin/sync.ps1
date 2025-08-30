@@ -1,4 +1,4 @@
-﻿# sync.ps1
+# sync.ps1
 # 将系统中的配置文件同步回 dotfiles 仓库
 # 支持 Copy 方法的配置文件
 

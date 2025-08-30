@@ -1,4 +1,4 @@
-﻿# utils.psm1 - Dotfiles 管理工具模块
+# utils.psm1 - Dotfiles 管理工具模块
 
 # ==================== 模块级变量 ====================
 $script:DotfilesDir = Split-Path $PSScriptRoot -Parent
@@ -159,7 +159,7 @@ function Format-JsonClean {
         }
     }
 
-    return $result -join [System.Environment]::NewLine
+    return $result -join "`n"
 }
 
 # 路径处理工具函数
@@ -328,7 +328,7 @@ function Write-OutputFile {
     }
 
     # 写入文件
-    [System.IO.File]::WriteAllText($TargetFile, ($finalJson + [System.Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($TargetFile, ($finalJson + "`n"), [System.Text.UTF8Encoding]::new($false))
 }
 
 # ==================== 文件比较函数 ====================

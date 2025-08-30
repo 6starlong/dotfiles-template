@@ -1,4 +1,4 @@
-﻿# config.psd1
+# config.psd1
 # Dotfiles 管理脚本的核心配置文件
 #
 # 添加新配置的步骤：
@@ -37,7 +37,7 @@
         # "configs/local.settings.json"
 
         # 按通配符模式忽略
-        "**/*.bak"
+        # "**/*.bak"
 
         # 按目录忽略
         # "configs/linux/"

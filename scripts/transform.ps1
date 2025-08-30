@@ -1,4 +1,4 @@
-﻿# transform.ps1
+# transform.ps1
 # 基于 TransformSettings 进行配置文件转换和生成
 # 支持命令行手动执行，可生成全部或指定配置
 

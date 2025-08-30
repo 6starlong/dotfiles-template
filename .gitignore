@@ -8,7 +8,7 @@ backups/
 Thumbs.db
 
 # VS Code
-.vscode/
+.vscode/*
 !.vscode/tasks.json
 
 # Temporary files
